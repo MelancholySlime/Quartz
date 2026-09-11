@@ -126,8 +126,16 @@ pub fn recolor_emitters(
     modified
 }
 
-/// Recolor a single color target (constant + keyframes). Returns true if any
-/// node changed.
+/// One editable color slot: either a single `vec4` node (constant or a
+/// `values` keyframe), or a set of up to four per-channel `f32` nodes projected
+/// from a `probabilityTables` block (`None` = channel not authored, left as-is).
+enum ColorNode {
+    Vec4(NodePath),
+    Channels([Option<NodePath>; 4]),
+}
+
+/// Recolor a single color target (constant + keyframes + channel tables).
+/// Returns true if any node changed.
 fn recolor_one(
     bins: &mut [crate::linked_bins::LoadedBin],
     target: &ColorTarget,
@@ -135,28 +143,46 @@ fn recolor_one(
     opts: &RecolorOptions,
     rng: &mut Rng,
 ) -> bool {
-    // Snapshot the current ordered values (constant first, then keyframes).
-    let mut nodes: Vec<NodePath> = Vec::new();
+    // Snapshot the current ordered slots (constant first, then vec4 keyframes,
+    // then probability-table keys). The order must match how `project_color`
+    // synthesized the parallel keyframe view.
+    let mut nodes: Vec<ColorNode> = Vec::new();
     if let Some(c) = &target.constant {
-        nodes.push(c.clone());
+        nodes.push(ColorNode::Vec4(c.clone()));
     }
-    nodes.extend(target.keyframes.iter().cloned());
+    nodes.extend(target.keyframes.iter().cloned().map(ColorNode::Vec4));
+    nodes.extend(target.channel_tables.iter().cloned().map(ColorNode::Channels));
     if nodes.is_empty() {
         return false;
     }
 
     let originals: Vec<[f32; 4]> = nodes
         .iter()
-        .map(|p| match p.resolve_mut(bins) {
-            Some(BinValue::Vec4(v)) => *v,
-            _ => [0.0, 0.0, 0.0, 1.0],
+        .map(|n| match n {
+            ColorNode::Vec4(p) => match p.resolve_mut(bins) {
+                Some(BinValue::Vec4(v)) => *v,
+                _ => [0.0, 0.0, 0.0, 1.0],
+            },
+            ColorNode::Channels(chans) => {
+                // Reconstruct the vec4 from each channel's f32 node; a missing
+                // channel defaults to opaque-white-ish so recolor math is sane.
+                let mut rgba = [1.0f32, 1.0, 1.0, 1.0];
+                for (ci, cp) in chans.iter().enumerate() {
+                    if let Some(p) = cp {
+                        if let Some(BinValue::F32(f)) = p.resolve_mut(bins) {
+                            rgba[ci] = *f;
+                        }
+                    }
+                }
+                rgba
+            }
         })
         .collect();
 
     let new_colors = compute_new_colors(&originals, palette, opts, rng);
 
     let mut changed = false;
-    for (i, path) in nodes.iter().enumerate() {
+    for (i, node) in nodes.iter().enumerate() {
         let original = originals[i];
         if opts.ignore_black_white && is_black_or_white(&original) {
             continue;
@@ -168,10 +194,30 @@ fn recolor_one(
             nc[3]
         };
         let finalc = [nc[0], nc[1], nc[2], alpha];
-        if finalc != original {
-            if let Some(BinValue::Vec4(v)) = path.resolve_mut(bins) {
-                *v = finalc;
-                changed = true;
+        if finalc == original {
+            continue;
+        }
+        match node {
+            ColorNode::Vec4(path) => {
+                if let Some(BinValue::Vec4(v)) = path.resolve_mut(bins) {
+                    *v = finalc;
+                    changed = true;
+                }
+            }
+            ColorNode::Channels(chans) => {
+                // Scatter each channel back into its own `keyValues` f32 node.
+                // Channels the color didn't author (`None`) are skipped, so we
+                // never introduce a component the engine wasn't sampling.
+                for (ci, cp) in chans.iter().enumerate() {
+                    if let Some(p) = cp {
+                        if let Some(BinValue::F32(f)) = p.resolve_mut(bins) {
+                            if *f != finalc[ci] {
+                                *f = finalc[ci];
+                                changed = true;
+                            }
+                        }
+                    }
+                }
             }
         }
     }

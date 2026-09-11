@@ -110,6 +110,41 @@ pub struct ColorData {
     pub keyframes: Vec<ColorKeyframe>,
     /// True when this is a single constant value (vs. an animated list).
     pub is_constant: bool,
+    pub storage: ColorStorage,
+    /// Index of the constant in the projected list. On a curve this is the
+    /// wrapper's constant, not a lifetime stop, so it cannot be retimed/deleted.
+    pub constant_index: Option<usize>,
+    pub supports_structural_edits: bool,
+    pub supports_retime: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ColorStorage {
+    Constant,
+    Curve,
+    ProbabilityTables,
+}
+
+impl ColorTarget {
+    fn view(&self, keyframes: Vec<ColorKeyframe>) -> ColorData {
+        let storage = if !self.channel_tables.is_empty() {
+            ColorStorage::ProbabilityTables
+        } else if !self.keyframes.is_empty() {
+            ColorStorage::Curve
+        } else {
+            ColorStorage::Constant
+        };
+        ColorData {
+            keyframes,
+            is_constant: storage == ColorStorage::Constant,
+            storage,
+            constant_index: self.constant.as_ref().map(|_| 0),
+            supports_structural_edits: self.is_value_color
+                && storage != ColorStorage::ProbabilityTables,
+            supports_retime: storage == ColorStorage::Curve,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -202,6 +237,10 @@ pub enum ColorSlot {
 pub struct EditIndex {
     /// `emitterKey` → (slot → path to the ValueColor embed or simple vec4).
     pub emitter_colors: HashMap<String, HashMap<ColorSlot, ColorTarget>>,
+    /// `emitterKey` → path to the emitter's own embed/pointer node (its field
+    /// map). Lets an edit insert a brand-new field (e.g. a missing color) onto
+    /// the emitter, which the per-slot `ColorTarget`s can't express.
+    pub emitter_nodes: HashMap<String, NodePath>,
     /// `emitterKey` → path to the `blendMode: u8` node.
     pub blend_modes: HashMap<String, NodePath>,
     /// `"mat::<materialKey>::<paramName>"` → path to the param `value: vec4`.
@@ -214,6 +253,10 @@ pub struct EditIndex {
 /// Where a color's editable vec4 nodes live.
 #[derive(Debug, Clone)]
 pub struct ColorTarget {
+    /// The color field itself, including nested reflectionDefinition colors.
+    pub color_path: NodePath,
+    /// Bare vec4 fields cannot legally be replaced with ValueColor embeds.
+    pub is_value_color: bool,
     /// Path to the constant vec4 node, if present (`constantValue` or a simple vec4).
     pub constant: Option<NodePath>,
     /// Paths to each keyframe vec4 in the `values` list, in order.
@@ -224,6 +267,21 @@ pub struct ColorTarget {
     /// initial open produced. Without it the refresh has to guess even spacing, and any
     /// color whose real times are uneven shifts its gradient after every recolor.
     pub times: Vec<f32>,
+    /// Per-channel probability-table scatter paths, present when the color is
+    /// authored as a `VfxAnimatedColorVariableData.probabilityTables` block
+    /// instead of a `values: list[vec4]`.
+    ///
+    /// The color there is stored as up to four parallel `VfxProbabilityTableData`
+    /// tables — one per RGBA channel, in vec4 component order (table[0]=R,
+    /// [1]=G, [2]=B, [3]=A), each holding a `keyValues: list[f32]`. There is no
+    /// vec4 node to edit; the color lives spread across those f32 lists.
+    ///
+    /// `channel_tables[k]` corresponds to synthesized keyframe `keyframes`
+    /// index `k` (the k-th entry across every channel's `keyValues`), and holds
+    /// `[Option<pathR>, pathG, pathB, pathA]` to each channel's F32 node for
+    /// that key. Channels a table doesn't author are `None` (and default to the
+    /// synthesized keyframe value on write, i.e. left unchanged).
+    pub channel_tables: Vec<[Option<NodePath>; 4]>,
 }
 
 // ── Projection ──────────────────────────────────────────────────────────────
@@ -239,6 +297,10 @@ struct Hashes {
     values: u32,
     dynamics: u32,
     times: u32,
+    probability_tables: u32,
+    key_values: u32,
+    key_times: u32,
+    reflection_definition: u32,
     color_slots: Vec<(ColorSlot, Vec<u32>)>,
     textures: Vec<(u32, &'static str)>,
     static_material: u32,
@@ -261,6 +323,10 @@ impl Hashes {
             values: fnv1a_lower("values"),
             dynamics: fnv1a_lower("dynamics"),
             times: fnv1a_lower("times"),
+            probability_tables: fnv1a_lower("probabilityTables"),
+            key_values: fnv1a_lower("keyValues"),
+            key_times: fnv1a_lower("keyTimes"),
+            reflection_definition: fnv1a_lower("reflectionDefinition"),
             // Field names that carry each color, in priority order.
             color_slots: vec![
                 (ColorSlot::Color, vec![fnv1a_lower("color")]),
@@ -454,6 +520,44 @@ fn project_emitter(
             }
         }
     }
+    // The labeled list above only reaches seven known top-level fields. An emitter
+    // can reference textures through other fields or nested structures
+    // (reflectionDefinition, alphaErosionDefinition, primitive mesh defs, sub
+    // emitters, …). Walk the whole emitter subtree for any texture-path string and
+    // add the ones the labeled pass missed, so the hover list matches Port's
+    // "every texture the emitter references" (Port: `collect_texture_strings`).
+    // These extras are display-only (labeled generically); the labeled entries keep
+    // their editable node paths in `emitter_textures`.
+    let mut all_tex: Vec<String> = Vec::new();
+    let mut all_mesh: Vec<String> = Vec::new();
+    collect_asset_paths(item, &mut all_tex, &mut all_mesh);
+    for p in all_tex {
+        if !textures.iter().any(|t| t.path.eq_ignore_ascii_case(&p)) {
+            textures.push(EmitterTexture {
+                label: "Texture".to_string(),
+                path: p,
+            });
+        }
+    }
+    // Mesh assets (.scb/.sco/.skn) the emitter draws through — Port keeps these
+    // in a separate list; Paint surfaces them in the same hover list with a Mesh
+    // label so nothing an emitter references is hidden.
+    for p in all_mesh {
+        if !textures.iter().any(|t| t.path.eq_ignore_ascii_case(&p)) {
+            textures.push(EmitterTexture {
+                label: "Mesh".to_string(),
+                path: p,
+            });
+        }
+    }
+    // Index EVERY reachable texture/mesh node (not just the 7 labeled top-level
+    // fields) so a path edit on a nested one (reflection / mesh def / sub-emitter)
+    // actually resolves and saves instead of silently no-op'ing. The labeled loop
+    // above already inserted the top-level ones; `or_insert` keeps those.
+    if !textures.is_empty() {
+        let node_map = index.emitter_textures.entry(key.clone()).or_default();
+        collect_texture_nodes(item, path, node_map);
+    }
 
     let mut targets: HashMap<ColorSlot, ColorTarget> = HashMap::new();
     let mut colors = EmitterColors {
@@ -479,9 +583,36 @@ fn project_emitter(
             }
         }
     }
+
+    // `fresnelColor` is often nested inside a `reflectionDefinition`
+    // (VfxReflectionDefinitionData) pointer rather than sitting on the emitter,
+    // so the top-level scan above misses it. When the FresnelColor slot is still
+    // empty, look one level into reflectionDefinition and project its
+    // `fresnelColor` (with the nested node path, so a recolor writes back into
+    // the reflection struct).
+    if !targets.contains_key(&ColorSlot::FresnelColor) {
+        if let Some(BinValue::Pointer { fields: rf, .. } | BinValue::Embed { fields: rf, .. }) =
+            fields.get(&h.reflection_definition)
+        {
+            let h_fresnel = fnv1a_lower("fresnelColor");
+            if let Some(field) = rf.get(&h_fresnel) {
+                let field_path = path
+                    .child(Step::Field(h.reflection_definition))
+                    .child(Step::Field(h_fresnel));
+                if let Some((data, target)) = project_color(field, &field_path, h) {
+                    colors.fresnel_color = Some(data);
+                    targets.insert(ColorSlot::FresnelColor, target);
+                }
+            }
+        }
+    }
+
     if !targets.is_empty() {
         index.emitter_colors.insert(key.clone(), targets);
     }
+    // Always record the emitter's own node path so an edit can add a missing
+    // color field to it later (independent of which colors it currently has).
+    index.emitter_nodes.insert(key.clone(), path.clone());
 
     Some(VfxEmitter {
         key,
@@ -529,13 +660,30 @@ pub(crate) fn color_data_from_target(
             keyframes.push(ColorKeyframe { rgba: *v, time });
         }
     }
+
+    // Probability-table channels: reconstruct each synthesized keyframe's vec4
+    // from its per-channel `keyValues` f32 nodes. Without this the post-recolor
+    // refresh returns None for a channel-table color (empty constant + keyframes),
+    // so the swatch renders transparent until a full reload re-projects it.
+    // `channel_tables` follows the `values` keyframes, matching `project_color`.
+    let base = target.keyframes.len();
+    for (k, chans) in target.channel_tables.iter().enumerate() {
+        let mut rgba = [1.0f32, 1.0, 1.0, 1.0];
+        for (ci, cp) in chans.iter().enumerate() {
+            if let Some(p) = cp {
+                if let Some(BinValue::F32(f)) = p.resolve_mut(bins) {
+                    rgba[ci] = *f;
+                }
+            }
+        }
+        let time = target.times.get(base + k).copied().unwrap_or(0.0);
+        keyframes.push(ColorKeyframe { rgba, time });
+    }
+
     if keyframes.is_empty() {
         return None;
     }
-    Some(ColorData {
-        keyframes,
-        is_constant: target.keyframes.is_empty(),
-    })
+    Some(target.view(keyframes))
 }
 
 /// Assemble a full per-emitter color view from its slot map (partial refresh).
@@ -572,20 +720,30 @@ fn project_color(
                     time: 0.0,
                 }],
                 is_constant: true,
+                storage: ColorStorage::Constant,
+                constant_index: Some(0),
+                supports_structural_edits: false,
+                supports_retime: false,
             },
             ColorTarget {
+                color_path: path.clone(),
+                is_value_color: false,
                 constant: Some(path.clone()),
                 keyframes: Vec::new(),
                 times: Vec::new(),
+                channel_tables: Vec::new(),
             },
         )),
         // ValueColor embed/pointer.
-        BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => {
+        BinValue::Embed { fields, class } | BinValue::Pointer { fields, class } => {
             let mut keyframes = Vec::new();
             let mut target = ColorTarget {
+                color_path: path.clone(),
+                is_value_color: *class == fnv1a_lower("ValueColor"),
                 constant: None,
                 keyframes: Vec::new(),
                 times: Vec::new(),
+                channel_tables: Vec::new(),
             };
 
             if let Some(BinValue::Vec4(v)) = fields.get(&h.constant_value) {
@@ -606,32 +764,100 @@ fn project_color(
                 _ => (path.clone(), fields),
             };
 
-            if let Some(BinValue::List { items, .. }) = values_fields.get(&h.values) {
-                // Prefer the real `times` list; fall back to even spacing.
-                let times: Vec<f32> = match values_fields.get(&h.times) {
-                    Some(BinValue::List { items: t, .. }) => t
-                        .iter()
-                        .filter_map(|v| match v {
-                            BinValue::F32(f) => Some(*f),
-                            _ => None,
-                        })
-                        .collect(),
-                    _ => Vec::new(),
-                };
-                let values_path = values_owner_path.child(Step::Field(h.values));
-                let count = items.len();
-                for (i, item) in items.iter().enumerate() {
-                    if let BinValue::Vec4(v) = item {
-                        let time = times.get(i).copied().unwrap_or_else(|| {
-                            if count <= 1 {
-                                0.0
-                            } else {
-                                i as f32 / (count - 1) as f32
+            // Probability-table color form takes PRIORITY over `values`: when the
+            // animated color authors `probabilityTables` (one VfxProbabilityTableData
+            // per RGBA channel, vec4 order, each with `keyValues: list[f32]` + a
+            // parallel `keyTimes`), that is where the real color lives and the
+            // `values` list is just a placeholder (typically a single `{1,1,1,1}`).
+            // Editing `values` there changes nothing rendered, so project the tables
+            // instead and record where each channel's key lives so the recolor engine
+            // can scatter new values back. `has_color_tables` guards the `values`
+            // fallback below so we don't also emit the placeholder as a keyframe.
+            let mut has_color_tables = false;
+            if let Some(BinValue::List { items: tables, .. }) =
+                values_fields.get(&h.probability_tables)
+            {
+                let tables_path = values_owner_path.child(Step::Field(h.probability_tables));
+                // Per channel: (keyValues f32 vec, keyTimes f32 vec, path to keyValues).
+                let mut chans: Vec<(usize, Vec<f32>, Vec<f32>, NodePath)> = Vec::new();
+                for (ci, tbl) in tables.iter().enumerate().take(4) {
+                    if let BinValue::Pointer { fields: tf, .. }
+                    | BinValue::Embed { fields: tf, .. } = tbl
+                    {
+                        let kv = f32_list(tf.get(&h.key_values));
+                        let kt = f32_list(tf.get(&h.key_times));
+                        let tpath = tables_path
+                            .child(Step::Index(ci))
+                            .child(Step::Field(h.key_values));
+                        chans.push((ci, kv, kt, tpath));
+                    }
+                }
+                // Synthesized keyframe count = max keyValues length across channels.
+                // Zero when every table is empty (a `VfxProbabilityTableData {}` with
+                // no keyValues, as authored on inert channels) — then this is not a
+                // real color-table block and we leave `has_color_tables` false so the
+                // `values`/constant path still drives the color.
+                let nkeys = chans
+                    .iter()
+                    .map(|(_, kv, _, _)| kv.len())
+                    .max()
+                    .unwrap_or(0);
+                if nkeys > 0 {
+                    has_color_tables = true;
+                    for k in 0..nkeys {
+                        let mut rgba = [1.0f32, 1.0, 1.0, 1.0];
+                        let mut scatter: [Option<NodePath>; 4] = [None, None, None, None];
+                        let mut time = if nkeys <= 1 {
+                            0.0
+                        } else {
+                            k as f32 / (nkeys - 1) as f32
+                        };
+                        for (ci, kv, kt, tpath) in &chans {
+                            if let Some(val) = kv.get(k) {
+                                rgba[*ci] = *val;
+                                scatter[*ci] = Some(tpath.child(Step::Index(k)));
                             }
-                        });
-                        keyframes.push(ColorKeyframe { rgba: *v, time });
-                        target.keyframes.push(values_path.child(Step::Index(i)));
+                            if *ci == 0 {
+                                if let Some(t) = kt.get(k) {
+                                    time = *t;
+                                }
+                            }
+                        }
+                        keyframes.push(ColorKeyframe { rgba, time });
+                        target.channel_tables.push(scatter);
                         target.times.push(time);
+                    }
+                }
+            }
+
+            if !has_color_tables {
+                if let Some(BinValue::List { items, .. }) = values_fields.get(&h.values) {
+                    // Prefer the real `times` list; fall back to even spacing.
+                    let times: Vec<f32> = match values_fields.get(&h.times) {
+                        Some(BinValue::List { items: t, .. }) => t
+                            .iter()
+                            .filter_map(|v| match v {
+                                BinValue::F32(f) => Some(*f),
+                                _ => None,
+                            })
+                            .collect(),
+                        _ => Vec::new(),
+                    };
+                    let values_path = values_owner_path.child(Step::Field(h.values));
+                    let count = items.len();
+                    for (i, item) in items.iter().enumerate() {
+                        if let BinValue::Vec4(v) = item {
+                            let time = times.get(i).copied().unwrap_or_else(|| {
+                                if count <= 1 {
+                                    0.0
+                                } else {
+                                    i as f32 / (count - 1) as f32
+                                }
+                            });
+                            keyframes.push(ColorKeyframe { rgba: *v, time });
+                            target.keyframes.push(values_path.child(Step::Index(i)));
+                            target.times.push(time);
+                        }
                     }
                 }
             }
@@ -639,16 +865,26 @@ fn project_color(
             if keyframes.is_empty() {
                 return None;
             }
-            let is_constant = target.keyframes.is_empty();
-            Some((
-                ColorData {
-                    keyframes,
-                    is_constant,
-                },
-                target,
-            ))
+            // A channel-table color animates across its keyValues, so it is not a
+            // constant even though `keyframes` (the vec4-list target) is empty.
+            Some((target.view(keyframes), target))
         }
         _ => None,
+    }
+}
+
+/// Read a bin field as a `Vec<f32>`, tolerating a missing / non-list value
+/// (returns empty). Used to lift `keyValues` / `keyTimes` scalar lists.
+fn f32_list(v: Option<&BinValue>) -> Vec<f32> {
+    match v {
+        Some(BinValue::List { items, .. }) => items
+            .iter()
+            .filter_map(|x| match x {
+                BinValue::F32(f) => Some(*f),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -714,6 +950,94 @@ fn string_of(v: &BinValue) -> Option<String> {
     match v {
         BinValue::String(s) => Some(s.clone()),
         _ => None,
+    }
+}
+
+/// Collect every texture (.dds/.tex/.png/.jpg) and mesh (.scb/.sco/.skn) path
+/// string anywhere in a value subtree, each deduped in walk order
+/// (case-insensitive). Mirrors the VFX-port collectors so Paint lists the same
+/// assets Port does — not just a fixed field list.
+fn collect_asset_paths(value: &BinValue, textures: &mut Vec<String>, meshes: &mut Vec<String>) {
+    match value {
+        BinValue::String(s) => {
+            let l = s.to_ascii_lowercase();
+            if l.ends_with(".dds")
+                || l.ends_with(".tex")
+                || l.ends_with(".png")
+                || l.ends_with(".jpg")
+            {
+                if !textures.iter().any(|e| e.eq_ignore_ascii_case(s)) {
+                    textures.push(s.clone());
+                }
+            } else if l.ends_with(".scb") || l.ends_with(".sco") || l.ends_with(".skn") {
+                if !meshes.iter().any(|e| e.eq_ignore_ascii_case(s)) {
+                    meshes.push(s.clone());
+                }
+            }
+        }
+        BinValue::List { items, .. } => {
+            items
+                .iter()
+                .for_each(|v| collect_asset_paths(v, textures, meshes));
+        }
+        BinValue::Pointer { fields, .. } | BinValue::Embed { fields, .. } => {
+            fields
+                .values()
+                .for_each(|v| collect_asset_paths(v, textures, meshes));
+        }
+        BinValue::Option {
+            value: Some(inner), ..
+        } => collect_asset_paths(inner, textures, meshes),
+        BinValue::Map { entries, .. } => {
+            for (k, v) in entries {
+                collect_asset_paths(k, textures, meshes);
+                collect_asset_paths(v, textures, meshes);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Index every texture/mesh string reachable from `value` by a resolvable
+/// `NodePath` (Field into embed/pointer, Index into list) into `out`, keyed by
+/// its path value. This makes nested textures (reflectionDefinition, mesh defs,
+/// sub-emitters, …) EDITABLE, not just display-only — `set_texture` looks the
+/// node up by its current string. Options/Maps are not addressable by the
+/// current `Step` enum, so a texture at or below one stays display-only (it is
+/// still shown, just not repathable). First writer wins so an already-indexed
+/// labeled top-level field is never clobbered.
+fn collect_texture_nodes(
+    value: &BinValue,
+    path: &NodePath,
+    out: &mut HashMap<String, NodePath>,
+) {
+    match value {
+        BinValue::String(s) => {
+            let l = s.to_ascii_lowercase();
+            let is_asset = l.ends_with(".dds")
+                || l.ends_with(".tex")
+                || l.ends_with(".png")
+                || l.ends_with(".jpg")
+                || l.ends_with(".scb")
+                || l.ends_with(".sco")
+                || l.ends_with(".skn");
+            if is_asset {
+                out.entry(s.clone()).or_insert_with(|| path.clone());
+            }
+        }
+        BinValue::List { items, .. } => {
+            for (i, v) in items.iter().enumerate() {
+                collect_texture_nodes(v, &path.child(Step::Index(i)), out);
+            }
+        }
+        BinValue::Pointer { fields, .. } | BinValue::Embed { fields, .. } => {
+            for (h, v) in fields.iter() {
+                collect_texture_nodes(v, &path.child(Step::Field(*h)), out);
+            }
+        }
+        // Option / Map inner nodes have no NodePath Step, so they can't be
+        // resolved for an in-place edit; leave them display-only.
+        _ => {}
     }
 }
 

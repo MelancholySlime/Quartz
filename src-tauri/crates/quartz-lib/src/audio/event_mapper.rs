@@ -217,6 +217,18 @@ fn add_connected_files(
         return;
     }
 
+    /* Blend/layer container. Same descent as the random container above, and it must come
+       BEFORE the leaf lookups or a Play action aimed at one resolves to nothing: Akali
+       skin92 routes 2 events through blend containers holding 20 of the bank's 107 wems,
+       and without this the walk stopped here and those wems reached no event name. */
+    if let Some(bc) = hirc.blend_containers.iter().find(|o| o.self_id == id) {
+        let pid = if bc.sound_ids.len() > 1 { id } else { parent_id };
+        for &child in &bc.sound_ids {
+            add_connected_files(event_name, child, pid, hirc, results);
+        }
+        return;
+    }
+
     if let Some(sc) = hirc.switch_containers.iter().find(|o| o.self_id == id) {
         for &child in &sc.children {
             add_connected_files(event_name, child, id, hirc, results);

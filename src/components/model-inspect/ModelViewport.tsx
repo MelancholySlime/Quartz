@@ -23,6 +23,9 @@ export interface ModelSceneReady {
     /** Force re-decode + re-apply every applied texture from disk (manual
      *  fallback when the file watcher misses a change). */
     reloadAllTextures: () => Promise<void>;
+    /** The host element containing the WebGL canvas, for pointer→NDC math when
+     *  vertex-painting (the RecolorHub attaches its paint listeners here). */
+    hostElement: HTMLElement | null;
 }
 
 export function ModelViewport({
@@ -209,6 +212,7 @@ export function ModelViewport({
                 applyGroupTextureFromDisk,
                 currentTexturePath,
                 reloadAllTextures,
+                hostElement: host,
             });
         })().catch((reason: unknown) => {
             if (cancelled) return;

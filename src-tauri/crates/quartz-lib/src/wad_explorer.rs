@@ -892,7 +892,25 @@ pub fn extract_selected(
     out_dir: &str,
     progress: Option<&ProgressFn<'_>>,
 ) -> Result<ExtractResult> {
-    extract_selected_with_options(wad_path, hashes, out_dir, true, true, progress)
+    extract_selected_impl(wad_path, hashes, None, out_dir, true, true, progress)
+}
+
+/// As [`extract_selected`], with names the CALLER knows for chunks the hash
+/// dictionary may not.
+///
+/// The skin extractor learns paths from the bins it walks: a `string =`
+/// reference IS the path, whether or not the installed dictionary has caught up
+/// with it. Passing those names here writes such a chunk under its real path
+/// instead of a hex name, so the repath's on-disk lookups find it. `names` is
+/// consulted before the resolved table for every hash it holds.
+pub fn extract_selected_named(
+    wad_path: &str,
+    hashes: &[u64],
+    names: &std::collections::HashMap<u64, String>,
+    out_dir: &str,
+    progress: Option<&ProgressFn<'_>>,
+) -> Result<ExtractResult> {
+    extract_selected_impl(wad_path, hashes, Some(names), out_dir, true, true, progress)
 }
 
 /// Explorer extraction variant with the two choices exposed by the old Quartz
@@ -905,8 +923,39 @@ pub fn extract_selected_with_options(
     preserve_paths: bool,
     progress: Option<&ProgressFn<'_>>,
 ) -> Result<ExtractResult> {
+    extract_selected_impl(
+        wad_path,
+        hashes,
+        None,
+        out_dir,
+        replace_existing,
+        preserve_paths,
+        progress,
+    )
+}
+
+fn extract_selected_impl(
+    wad_path: &str,
+    hashes: &[u64],
+    names: Option<&std::collections::HashMap<u64, String>>,
+    out_dir: &str,
+    replace_existing: bool,
+    preserve_paths: bool,
+    progress: Option<&ProgressFn<'_>>,
+) -> Result<ExtractResult> {
     let selected: HashSet<u64> = hashes.iter().copied().collect();
     let out_dir = Path::new(out_dir);
+
+    // Caller-supplied names win over the dictionary for the hashes they cover.
+    let names = names.filter(|n| !n.is_empty());
+    let overlay = |mut resolved: crate::hash::ResolvedHashes| -> crate::hash::ResolvedHashes {
+        if let Some(names) = names {
+            for (h, p) in names {
+                resolved.insert(*h, p);
+            }
+        }
+        resolved
+    };
 
     // Reuse a live mount's parsed TOC + resolved table when possible; else parse
     // the TOC fresh. The `Wad` here is TOC-only (no data section), so cloning it
@@ -917,7 +966,11 @@ pub fn extract_selected_with_options(
         let reg = registry().read();
         match reg.values().find(|m| m.path.as_os_str() == wp.as_os_str()) {
             Some(m) => {
-                let plan = build_plan(&m.wad, &m.resolved, &selected);
+                let plan = match names {
+                    // The mount's table is shared; the copy is one WAD's worth.
+                    Some(_) => build_plan(&m.wad, &overlay((*m.resolved).clone()), &selected),
+                    None => build_plan(&m.wad, &m.resolved, &selected),
+                };
                 (m.wad.clone(), plan)
             }
             None => {
@@ -927,7 +980,7 @@ pub fn extract_selected_with_options(
                 let mut reader = std::io::BufReader::new(file);
                 let wad = Wad::from_reader_toc(&mut reader)
                     .map_err(|e| Error::wad_with_path(e.to_string(), wad_path))?;
-                let resolved = resolve_all(&wad.chunks);
+                let resolved = overlay(resolve_all(&wad.chunks));
                 let plan = build_plan(&wad, &resolved, &selected);
                 (wad, plan)
             }

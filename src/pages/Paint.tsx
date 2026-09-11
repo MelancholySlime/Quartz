@@ -21,9 +21,9 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { FolderOpen as FolderOpenIcon, Undo2 as UndoIcon, Redo2 as RedoIcon } from 'lucide-react';
 import { useFileExplorer } from '@/components/explorer';
 import {
-    paintOpen, paintClose, paintReloadIfChanged, paintModel, paintRecolor, paintSetBlendMode, paintSetBlendModeBulk, paintSetMaterialParam, paintSetTexture, paintSetColorAlpha, paintUndo, paintRedo, paintSave,
+    paintOpen, paintClose, paintReloadIfChanged, paintModel, paintRecolor, paintSetBlendMode, paintSetBlendModeBulk, paintSetMaterialParam, paintSetTexture, paintUndo, paintRedo, paintSave,
     isStaleFileError,
-    type VfxEmitter, type ColorTargetId,
+    type VfxEmitter, type ColorTargetId, type VfxModel,
     type PaletteStopInput, type RecolorOptionsInput,
 } from '@/lib/api';
 import { useNavigationStore, useNotificationStore, usePaintStore, useUiPrefsStore, type HslValues, type PaintState as PaintStoreState } from '@/lib/stores';
@@ -41,8 +41,10 @@ import { isDistortionEmitterName } from './paint/utils/emitterFilter';
 
 import SystemList, { type ColorSlotKey } from './paint/components/SystemList';
 import PaletteManager, { type SavedPaletteItem } from './paint/components/PaletteManager';
-import { ColorPickerHost, openColorPicker, cleanupColorPickers } from './paint/components/ColorPicker';
-import AlphaEditorModal from './paint/components/AlphaEditorModal';
+import { ColorPickerHost } from './paint/components/ColorPicker';
+import { openColorPicker, cleanupColorPickers } from './paint/components/colorPickerController';
+import ColorEditorModal from './paint/components/ColorEditorModal';
+import { colorTargetFields, type ColorEditorTarget } from './paint/components/colorEditorUtils';
 import {
     closeTexturePreview, scheduleTexturePreviewClose, showTexturePreview,
 } from '@/lib/util/texturePreview';
@@ -993,6 +995,22 @@ function Paint() {
     }, [model, systemMap, emitterMap, lockedSystems, searchQuery]);
 
     // ============================================================
+    // EDIT BOOKKEEPING
+    // ============================================================
+
+    /* Single entry point for every mutation result: refresh the model AND flip
+       the page's undo/dirty flags. Anything that skips this leaves the toolbar
+       thinking the bin is untouched, so Undo and Save both stay dead. */
+    const applyEditedModel = useCallback((next: VfxModel, msg: string) => {
+        setModel(next); setCanUndo(true); setCanRedo(false); setFileSaved(false); notify('success', msg);
+    }, [setModel, setCanUndo, setCanRedo, setFileSaved, notify]);
+    const refreshEditedModel = useCallback(async (msg: string) => {
+        if (sessionId === null) return;
+        const fresh = await paintModel(sessionId);
+        applyEditedModel(fresh, msg);
+    }, [sessionId, applyEditedModel]);
+
+    // ============================================================
     // TEXTURE PREVIEW
     // ============================================================
 
@@ -1006,13 +1024,16 @@ function Paint() {
                 if (sessionId === null) return;
                 try {
                     const next = await paintSetTexture(sessionId, emitter.key, oldPath, newPath);
-                    if (next) { setModel(next); notify('success', 'Texture path updated'); }
+                    // A null model means the backend found no editable node for
+                    // that path - say so instead of failing silently.
+                    if (next) applyEditedModel(next, 'Texture path updated');
+                    else notify('error', 'That texture path is not editable in this emitter');
                 } catch (e) {
                     notify('error', `Failed to update texture: ${e instanceof Error ? e.message : String(e)}`);
                 }
             },
         });
-    }, [filePath, sessionId, setModel, notify]);
+    }, [filePath, sessionId, applyEditedModel, notify]);
 
     const handleTextureLeave = useCallback(() => {
         scheduleTexturePreviewClose(500);
@@ -1022,24 +1043,27 @@ function Paint() {
         closeTexturePreview();
     }, []);
 
-    // Right-click a color block → edit that slot's per-keyframe alpha directly.
-    const [alphaTarget, setAlphaTarget] = useState<{
-        emitterKey: string; slot: ColorSlotKey; title: string; keyframes: { rgba: number[]; time: number }[];
-    } | null>(null);
-    const handleColorAlpha = useCallback((emitterKey: string, slot: ColorSlotKey, title: string, colors: { rgba: number[]; time: number }[]) => {
-        setAlphaTarget({ emitterKey, slot, title, keyframes: colors });
-    }, []);
-    const handleApplyAlpha = useCallback(async (alphas: number[]) => {
-        if (!alphaTarget || sessionId === null) { setAlphaTarget(null); return; }
-        try {
-            const next = await paintSetColorAlpha(sessionId, alphaTarget.emitterKey, alphaTarget.slot, alphas);
-            if (next) { setModel(next); setCanUndo(true); setCanRedo(false); setFileSaved(false); notify('success', 'Alpha updated'); }
-        } catch (e) {
-            notify('error', `Failed to update alpha: ${e instanceof Error ? e.message : String(e)}`);
-        }
-        setAlphaTarget(null);
-    }, [alphaTarget, sessionId, setModel, setCanUndo, setCanRedo, setFileSaved, notify]);
-
+    // Right-click a color block → open the full color/keyframe editor.
+    const [colorTarget, setColorTarget] = useState<ColorEditorTarget | null>(null);
+    const handleColorAlpha = useCallback((emitterKey: string, slot: ColorSlotKey, title: string) => {
+        if (sessionId === null) return;
+        const em = model?.emitters.find((e) => e.key === emitterKey);
+        if (!em) return;
+        cleanupColorPickers();
+        setColorTarget({
+            sessionId, emitterKey, slot, title,
+            ...colorTargetFields(em, slot), binPath: filePath ?? '',
+        });
+    }, [sessionId, model, filePath]);
+    // Also re-sync after undo, redo and an external file reload.
+    useEffect(() => {
+        setColorTarget((prev) => {
+            if (!prev) return prev;
+            if (prev.sessionId !== sessionId) return null;
+            const em = model?.emitters.find((e) => e.key === prev.emitterKey);
+            return em ? { ...prev, ...colorTargetFields(em, prev.slot), binPath: filePath ?? '' } : null;
+        });
+    }, [model, sessionId, filePath]);
     const importColorsToPalette = useCallback((colors: { rgba: number[]; time: number }[]) => {
         cleanupColorPickers();
         const newPalette = colors.map(c => {
@@ -1522,12 +1546,11 @@ function Paint() {
                 </DialogActions>
             </Dialog>
 
-            <AlphaEditorModal
-                open={alphaTarget !== null}
-                title={alphaTarget?.title ?? ''}
-                keyframes={alphaTarget?.keyframes ?? []}
-                onApply={handleApplyAlpha}
-                onClose={() => setAlphaTarget(null)}
+            <ColorEditorModal
+                target={colorTarget}
+                onModel={applyEditedModel}
+                onRefresh={refreshEditedModel}
+                onClose={() => setColorTarget(null)}
             />
         </Box>
     );

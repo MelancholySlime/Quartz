@@ -21,6 +21,8 @@ export interface ResolvedPath {
     exists: boolean;
     isDir: boolean;
     isFile: boolean;
+    /** Last-modified epoch ms (0 when unavailable). Cache key for edited files. */
+    modified: number;
 }
 
 /** List a directory (dirs-first, alpha). `extFilter` keeps only files whose

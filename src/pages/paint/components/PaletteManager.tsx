@@ -19,7 +19,7 @@ import { useFileExplorer } from '@/components/explorer';
 import { readFileBase64 } from '@/lib/api';
 import ColorHandler from '../utils/ColorHandler';
 import { savePalette, deletePalette } from '../utils/paletteManager';
-import { openColorPicker } from './ColorPicker';
+import { openColorPicker } from './colorPickerController';
 import { useMinecraftStyle } from '../useMinecraftStyle';
 import type { RecolorModeId as RecolorMode } from '@/lib/api';
 
@@ -287,24 +287,30 @@ const PaletteManager: React.FC<PaletteManagerProps> = ({
                         }}
                         onClick={(event) => {
                             const startAlpha = color.vec4?.[3] ?? 1;
+                            const dbg = (window as unknown as { __pickerDebug?: boolean }).__pickerDebug;
                             // Both the hex commit and the alpha slider mutate stop `idx`.
                             const patchStop = (mutate: (h: ColorHandler) => void) => {
                                 setPalette((prev) => {
-                                    if (!Array.isArray(prev) || !prev[idx]) return prev;
+                                    if (!Array.isArray(prev) || !prev[idx]) {
+                                        if (dbg) console.log('[picker] patchStop: stop', idx, 'missing — palette unchanged', { isArray: Array.isArray(prev), len: prev?.length });
+                                        return prev;
+                                    }
                                     const current = prev[idx];
                                     const next = [...prev];
                                     const updated = new ColorHandler(current?.ToVec4?.() || current?.vec4 || [0.5, 0.5, 0.5, 1]);
                                     mutate(updated);
                                     updated.time = current?.time ?? (prev.length === 1 ? 0 : idx / (prev.length - 1));
                                     next[idx] = updated;
+                                    if (dbg) console.log('[picker] patchStop applied to stop', idx, { before: current?.ToHEX?.(), after: updated.ToHEX?.(), vec4: updated.vec4 });
                                     return next;
                                 });
                             };
+                            if (dbg) console.log('[picker] palette swatch clicked', { idx, startHex: color.ToHEX(), startAlpha });
                             openColorPicker(
                                 event,
                                 color.ToHEX(),
-                                (hex) => patchStop((h) => h.InputHex(hex)),
-                                { alpha: startAlpha, onAlpha: (a) => patchStop((h) => { h.vec4[3] = a; }) },
+                                (hex) => { if (dbg) console.log('[picker] onCommit -> patchStop InputHex', hex); patchStop((h) => h.InputHex(hex)); },
+                                { alpha: startAlpha, onAlpha: (a) => { if (dbg) console.log('[picker] onAlpha -> patchStop', a); patchStop((h) => { h.vec4[3] = a; }); } },
                             );
                         }}
                     />

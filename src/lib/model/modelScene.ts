@@ -85,6 +85,22 @@ export interface MountedModelScene {
     appliedTextures: () => Record<string, string>;
     /** Submesh group names in render order (for the per-submesh picker UI). */
     groupNames: () => string[];
+    // ── Vertex-color painting ────────────────────────────────────────────────
+    /** Suspend / resume orbit controls (used while painting so a drag paints
+     *  instead of rotating the camera). */
+    setControlsEnabled: (on: boolean) => void;
+    /** Ensure the geometry has a `color` attribute and every material renders
+     *  it. Allocates a white RGB block (and flips `vertexColors`) when the mesh
+     *  had no baked colours, so painting works on a colourless mesh. */
+    ensureVertexColors: () => void;
+    /** Paint at a normalized device coordinate: raycast the mesh, then blend the
+     *  hit vertex (and every preview corner sharing its mesh vertex, plus corners
+     *  within `radius` world units) toward `rgb` (0-255) by `strength` (0..1).
+     *  No-op on a miss. Returns true when something was painted. */
+    paintAtNdc: (ndcX: number, ndcY: number, rgb: [number, number, number], radius: number, strength: number) => boolean;
+    /** Copy of the live per-preview-vertex colour buffer as RGB bytes
+     *  (length = vertexCount*3), for saving back to the mesh. */
+    readVertexColors: () => Uint8Array;
     dispose: () => void;
 }
 
@@ -504,6 +520,48 @@ export async function mountModelScene(
     }
     if (requestedTextures['*']) groupUrl['*'] = requestedTextures['*'];
 
+    // ── Vertex-color painting ────────────────────────────────────────────────
+    // Raycast the mesh, then blend hit vertices toward a colour in the geometry's
+    // `color` attribute (RGB 0..1). One mesh vertex is duplicated across every
+    // face corner (the static flatten), so painting a corner also paints every
+    // corner sharing its mesh vertex (via data.sourceIndices) — no seams, and a
+    // 1:1 match to the per-vertex block saved to disk.
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    // Map mesh-vertex index -> the preview corners that share it, so a single hit
+    // paints the whole shared vertex. Built once (cheap; sizes are small).
+    const cornersByMeshVertex = new Map<number, number[]>();
+    if (data.sourceIndices.length) {
+        for (let k = 0; k < data.sourceIndices.length; k++) {
+            const m = data.sourceIndices[k];
+            const arr = cornersByMeshVertex.get(m);
+            if (arr) arr.push(k); else cornersByMeshVertex.set(m, [k]);
+        }
+    }
+
+    const ensureColorAttr = (): THREE.BufferAttribute => {
+        let attr = geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+        if (!attr) {
+            const white = new Float32Array(data.vertexCount * 3).fill(1);
+            attr = new THREE.BufferAttribute(white, 3);
+            geometry.setAttribute('color', attr);
+            for (const m of materials) {
+                m.vertexColors = true;
+                m.color.setHex(0xffffff);
+                m.needsUpdate = true;
+            }
+            invalidate();
+        }
+        return attr;
+    };
+
+    const paintCorner = (attr: THREE.BufferAttribute, corner: number, rgb: [number, number, number], strength: number) => {
+        const r = attr.getX(corner) + (rgb[0] / 255 - attr.getX(corner)) * strength;
+        const g = attr.getY(corner) + (rgb[1] / 255 - attr.getY(corner)) * strength;
+        const b = attr.getZ(corner) + (rgb[2] / 255 - attr.getZ(corner)) * strength;
+        attr.setXYZ(corner, r, g, b);
+    };
+
     return {
         data,
         skinned: canSkin,
@@ -588,6 +646,56 @@ export async function mountModelScene(
         },
         setShowGrid: (on) => { if (ground) ground.visible = on; invalidate(); },
         setShowSkybox: (on) => { applySkyboxVisible(on); invalidate(); },
+        setControlsEnabled: (on) => {
+            controls.enabled = on;
+            controls.enableRotate = on;
+            controls.enablePan = on;
+        },
+        ensureVertexColors: () => { ensureColorAttr(); },
+        paintAtNdc: (ndcX, ndcY, rgb, radius, strength) => {
+            const attr = ensureColorAttr();
+            ndc.set(ndcX, ndcY);
+            raycaster.setFromCamera(ndc, camera);
+            const hits = raycaster.intersectObject(mesh, false);
+            if (!hits.length) return false;
+            const hit = hits[0];
+            if (hit.face == null) return false;
+            const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+            // The three hit-face corners, plus (for a positive radius) every corner
+            // within `radius` LOCAL units of the hit point. Then expand each to its
+            // whole shared mesh vertex so no seam remains.
+            const painted = new Set<number>();
+            const seedCorners = [hit.face.a, hit.face.b, hit.face.c];
+            const localHit = mesh.worldToLocal(hit.point.clone());
+            const rr = radius * radius;
+            const consider = (corner: number) => {
+                const m = data.sourceIndices[corner];
+                const group = (m != null && cornersByMeshVertex.get(m)) || [corner];
+                for (const c of group) painted.add(c);
+            };
+            seedCorners.forEach(consider);
+            if (radius > 0) {
+                const v = new THREE.Vector3();
+                for (let c = 0; c < posAttr.count; c++) {
+                    v.fromBufferAttribute(posAttr, c);
+                    if (v.distanceToSquared(localHit) <= rr) consider(c);
+                }
+            }
+            for (const c of painted) paintCorner(attr, c, rgb, strength);
+            attr.needsUpdate = true;
+            invalidate();
+            return painted.size > 0;
+        },
+        readVertexColors: () => {
+            const attr = ensureColorAttr();
+            const out = new Uint8Array(attr.count * 3);
+            for (let i = 0; i < attr.count; i++) {
+                out[i * 3] = Math.round(Math.min(1, Math.max(0, attr.getX(i))) * 255);
+                out[i * 3 + 1] = Math.round(Math.min(1, Math.max(0, attr.getY(i))) * 255);
+                out[i * 3 + 2] = Math.round(Math.min(1, Math.max(0, attr.getZ(i))) * 255);
+            }
+            return out;
+        },
         dispose: () => {
             if (disposed) return;
             disposed = true;

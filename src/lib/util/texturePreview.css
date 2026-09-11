@@ -124,7 +124,8 @@
 
 /* Inline path editor (replaces the caption while editing). */
 .tex-preview__caption-input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     box-sizing: border-box;
     font-family: var(--font-mono);
     font-size: 10px;
@@ -134,6 +135,29 @@
     background: var(--bg-primary, #000);
     color: var(--text-primary, #fff);
     outline: none;
+}
+
+/* Explicit save (commit) button shown while editing a path. */
+.tex-preview__save {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--accent, var(--accent-primary));
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent, var(--accent-primary)) 16%, transparent);
+    color: var(--accent, var(--accent-primary));
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.tex-preview__save:hover {
+    background: var(--accent, var(--accent-primary));
+    color: #fff;
 }
 
 /* Right-click context menu. */

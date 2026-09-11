@@ -10,6 +10,14 @@ pub struct HircData {
     pub event_actions: Vec<HircEventAction>,
     pub events: Vec<HircEvent>,
     pub random_containers: Vec<HircRandomContainer>,
+    /// Blend/layer containers (HIRC type 9). Same shape as a random container for our
+    /// purposes: an id plus the children the event walk has to descend into.
+    ///
+    /// Not handled at all until 2026-09: Akali skin92's SFX bank routes 2 of its Play
+    /// actions through blend containers, and the random containers underneath them hold
+    /// 20 of the bank's 107 wems. Skipping type 9 stopped the walk dead there, so those
+    /// 20 reached no event and the tree fell back to naming them `<id>.wem` at the root.
+    pub blend_containers: Vec<HircRandomContainer>,
     pub switch_containers: Vec<HircSwitchContainer>,
     pub music_segments: Vec<HircMusicContainer>,
     pub music_tracks: Vec<HircMusicTrack>,
@@ -316,6 +324,36 @@ fn read_random_container(c: &mut Cursor<&[u8]>, version: u32) -> HircRandomConta
     }
 }
 
+/// Blend/layer container (type 9).
+///
+/// Children sit directly after NodeBaseParams, with NO playlist-settings block in
+/// between - that 24-byte skip belongs to the random/sequence container and must not be
+/// copied here, or the child count reads out of the middle of a layer definition.
+fn read_blend_container(c: &mut Cursor<&[u8]>, version: u32) -> HircRandomContainer {
+    let self_id = read_u32(c);
+    let parent_id = skip_base_params(c, version);
+    let count = read_u32(c);
+    // A mis-parse shows up as a nonsense count, and `with_capacity` on it would try to
+    // reserve gigabytes. Bail to empty instead: the walk then just misses this subtree,
+    // which is the old behaviour, rather than taking the process down.
+    if count > 4096 {
+        return HircRandomContainer {
+            self_id,
+            parent_id,
+            sound_ids: Vec::new(),
+        };
+    }
+    let mut sound_ids = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        sound_ids.push(read_u32(c));
+    }
+    HircRandomContainer {
+        self_id,
+        parent_id,
+        sound_ids,
+    }
+}
+
 fn read_switch_container(c: &mut Cursor<&[u8]>, version: u32) -> HircSwitchContainer {
     let self_id = read_u32(c);
     let parent_id = skip_base_params(c, version);
@@ -532,6 +570,9 @@ pub fn parse_hirc_section(hirc_data: &[u8], version: u32) -> Result<HircData, St
             6 => data
                 .switch_containers
                 .push(read_switch_container(&mut c, version)),
+            9 => data
+                .blend_containers
+                .push(read_blend_container(&mut c, version)),
             10 => data
                 .music_segments
                 .push(read_music_container(&mut c, version)),

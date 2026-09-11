@@ -190,12 +190,17 @@ function applyResult(host: HTMLElement, url: string | null) {
 function beginCaptionEdit(caption: HTMLElement, fullPath: string): void {
     const handler = activeEditHandler;
     if (!handler) return;
+    if (editing) return; // already editing this panel — don't re-enter
     editing = true;
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'tex-preview__caption-input';
     input.value = fullPath;
     caption.replaceWith(input);
+    // Hide the (now-inert) pencil beside the caption so the edit row shows just
+    // the input + the save button.
+    const pencil = input.parentElement?.querySelector<HTMLElement>('.tex-preview__edit');
+    if (pencil) pencil.style.display = 'none';
     input.focus();
     input.select();
 
@@ -210,12 +215,31 @@ function beginCaptionEdit(caption: HTMLElement, fullPath: string): void {
         // wants (the resident model changed).
         removePreview();
     };
+
+    // Explicit save button — a reliable click-to-commit that doesn't depend on
+    // Enter/blur timing (the hover-close watchdog could otherwise swallow the
+    // keystroke). Sits right after the input. mousedown preventDefault keeps the
+    // input focused so its own blur-commit doesn't race the click.
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'tex-preview__save';
+    saveBtn.title = 'Save path';
+    saveBtn.textContent = '✓'; // check mark
+    saveBtn.onmousedown = (e) => { e.preventDefault(); };
+    saveBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); commit(true); };
+    input.after(saveBtn);
+
     input.onkeydown = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); commit(true); }
         else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
         e.stopPropagation();
     };
-    input.onblur = () => commit(true);
+    input.onblur = (e) => {
+        // Don't commit-close when focus moves to the save button; its click
+        // handles the commit. Any other blur still commits.
+        if (e.relatedTarget === saveBtn) return;
+        commit(true);
+    };
 }
 
 function buildPanel(textures: PreviewTexture[], anchor: DOMRect): void {
@@ -482,6 +506,8 @@ function openPreviewContextMenu(
                         if (diskPath) openModelInspect(diskPath, modelTexturePath);
                     }, !diskPath),
                 );
+                // Vertex-color recolor lives inside the Inspect Model viewer (its
+                // Render panel) so the change previews live on the mesh.
             } else {
                 menu.appendChild(
                     makeItem('Open in ImgRecolor', () => {

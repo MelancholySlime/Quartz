@@ -329,17 +329,25 @@ const Row = React.memo(function Row(props: { row: ListRow; state: RowState; styl
                 </Box>
 
                 {showLingerColor && <ColorBlock variant="secondary" colors={colors.lingerColor} title="Linger Color"
-                    onClick={(e) => { e.stopPropagation(); if (colors.lingerColor.length > 0) onColorClick(colors.lingerColor); }}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (colors.lingerColor.length > 0) onColorAlpha(row.emitter.key, 'lingerColor', 'Linger Color', colors.lingerColor); }} />}
-                {showOC && <ColorBlock variant="secondary" colors={colors.fresnelColor} title="OC/Fresnel"
-                    onClick={(e) => { e.stopPropagation(); if (colors.fresnelColor.length > 0) onColorClick(colors.fresnelColor); }}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (colors.fresnelColor.length > 0) onColorAlpha(row.emitter.key, 'fresnelColor', 'OC/Fresnel', colors.fresnelColor); }} />}
+                    onCreate={() => onColorAlpha(row.emitter.key, 'lingerColor', 'Linger Color', colors.lingerColor)}
+                    onEdit={() => onColorAlpha(row.emitter.key, 'lingerColor', 'Linger Color', colors.lingerColor)}
+                    onCopy={() => { if (colors.lingerColor.length > 0) onColorClick(colors.lingerColor); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onColorAlpha(row.emitter.key, 'lingerColor', 'Linger Color', colors.lingerColor); }} />}
+                {showOC && <ColorBlock variant="secondary" ignoreAlpha colors={colors.fresnelColor} title="OC/Fresnel"
+                    onCreate={() => onColorAlpha(row.emitter.key, 'fresnelColor', 'OC/Fresnel', colors.fresnelColor)}
+                    onEdit={() => onColorAlpha(row.emitter.key, 'fresnelColor', 'OC/Fresnel', colors.fresnelColor)}
+                    onCopy={() => { if (colors.fresnelColor.length > 0) onColorClick(colors.fresnelColor); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onColorAlpha(row.emitter.key, 'fresnelColor', 'OC/Fresnel', colors.fresnelColor); }} />}
                 {showBirthColor && <ColorBlock variant="standard" colors={colors.birthColor} title="Birth Color"
-                    onClick={(e) => { e.stopPropagation(); if (colors.birthColor.length > 0) onColorClick(colors.birthColor); }}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (colors.birthColor.length > 0) onColorAlpha(row.emitter.key, 'birthColor', 'Birth Color', colors.birthColor); }} />}
+                    onCreate={() => onColorAlpha(row.emitter.key, 'birthColor', 'Birth Color', colors.birthColor)}
+                    onEdit={() => onColorAlpha(row.emitter.key, 'birthColor', 'Birth Color', colors.birthColor)}
+                    onCopy={() => { if (colors.birthColor.length > 0) onColorClick(colors.birthColor); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onColorAlpha(row.emitter.key, 'birthColor', 'Birth Color', colors.birthColor); }} />}
                 {showBaseColor && <ColorBlock variant="wide" colors={colors.color} title="Base Color"
-                    onClick={(e) => { e.stopPropagation(); if (colors.color.length > 0) onColorClick(colors.color); }}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (colors.color.length > 0) onColorAlpha(row.emitter.key, 'color', 'Base Color', colors.color); }} />}
+                    onCreate={() => onColorAlpha(row.emitter.key, 'color', 'Base Color', colors.color)}
+                    onEdit={() => onColorAlpha(row.emitter.key, 'color', 'Base Color', colors.color)}
+                    onCopy={() => { if (colors.color.length > 0) onColorClick(colors.color); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onColorAlpha(row.emitter.key, 'color', 'Base Color', colors.color); }} />}
 
                 <Box
                     sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in oklab, var(--accent-primary) 10%, transparent)', borderRadius: 'var(--radius-sm)', padding: '0 2px', ml: 0.5, height: '24px', border: '1px solid transparent', '&:hover': { border: '1px solid color-mix(in oklab, var(--accent-primary) 35%, transparent)' } }}

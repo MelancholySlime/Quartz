@@ -926,8 +926,20 @@ where
     }
 
     while let Some(hash) = queue.pop() {
-        let Ok(bytes) = wad_explorer::read_chunk(&wad_str, hash) else {
-            continue;
+        // A BIN that cannot be read or parsed takes every asset it references
+        // out of the extraction with it. That is a loss worth naming: a mod
+        // missing its body texture with nothing in the log is what gets reported
+        // as "the extractor sometimes skips files".
+        let bytes = match wad_explorer::read_chunk(&wad_str, hash) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(
+                    "extract: BIN {:016x} could not be read; every asset it references is dropped: {}",
+                    hash,
+                    e
+                );
+                continue;
+            }
         };
         // A bin may carry its own hash->path trailer (repathed/custom paths that no
         // dictionary knows). Register it BEFORE resolving so those hashed refs
@@ -945,8 +957,16 @@ where
             }
         }
         let body = crate::bin::bin_trailer::strip_trailer(&bytes);
-        let Ok(bin) = crate::bin::read_bin(body) else {
-            continue;
+        let bin = match crate::bin::read_bin(body) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(
+                    "extract: BIN {:016x} failed to parse; every asset it references is dropped: {}",
+                    hash,
+                    e
+                );
+                continue;
+            }
         };
 
         // Plaintext `string =` asset refs (the classic form).
@@ -984,6 +1004,9 @@ where
 
     // Selection = reachable BIN hashes ∪ referenced (non-BIN) assets in TOC.
     let mut selection: HashSet<u64> = reachable_hashes.clone();
+    // Paths this walk knows that the hash dictionary does not, handed to the
+    // writer so the chunks land under their real names.
+    let mut known_names: HashMap<u64, String> = HashMap::new();
     for asset in &referenced {
         let rel = normalize_rel(asset);
         if rel.ends_with(".bin") {
@@ -998,12 +1021,41 @@ where
         // A BIN in one character tree can reference an asset in another; keep
         // the selection inside the scope so the legacy tree that shares this
         // archive is never dragged in (and vice versa).
-        if !rel_in_scope(&rel, scope) {
+        //
+        // That split is the modern/legacy one only. The TFT `Exact` scope exists
+        // to pick ONE pet's seed bin out of the ~80 in Companions.wad, and must
+        // not police referenced assets: a pet's effects legitimately use files
+        // stored under other characters' folders in that same archive (petbunny
+        // names a Fiora particle texture that Companions.wad holds). Dropping
+        // those is a lost texture, not a kept boundary.
+        let separates_trees = !matches!(scope, CharacterScope::Exact(_));
+        if separates_trees && !rel_in_scope(&rel, scope) {
             continue;
         }
-        if let Some(&hash) = by_path.get(&rel) {
-            selection.insert(hash);
+        match by_path.get(&rel) {
+            Some(&hash) => {
+                selection.insert(hash);
+            }
+            None => {
+                // The TOC entry has no dictionary name, but the reference IS the
+                // path, so its hash is known regardless. Selecting it directly
+                // keeps the asset when the installed hashes are older than the
+                // skin (a fresh release, a machine that has not synced). Before
+                // this, a stale dictionary silently dropped such assets: the
+                // bins named them, the archive held them, and they never came out.
+                let hash = crate::wad::path_hash(&rel);
+                if all_hashes.contains(&hash) && selection.insert(hash) {
+                    known_names.insert(hash, rel.clone());
+                }
+            }
         }
+    }
+    if !known_names.is_empty() {
+        tracing::warn!(
+            "extract: {} referenced asset(s) the hash dictionary cannot name were selected by \
+             hashing the reference itself; the hashes look stale, redownload them in Settings",
+            known_names.len()
+        );
     }
 
     // Unresolved `file =` refs whose path no dictionary knows: the xxh64 hash IS a
@@ -1056,7 +1108,7 @@ where
         });
     };
     let selection: Vec<u64> = selection.into_iter().collect();
-    wad_explorer::extract_selected(&wad_str, &selection, &out_str, Some(&cb))
+    wad_explorer::extract_selected_named(&wad_str, &selection, &known_names, &out_str, Some(&cb))
 }
 
 // ── TFT companion extraction ────────────────────────────────────────────────
@@ -1499,6 +1551,21 @@ fn run_split_and_consolidate(
            LockeTotem's body texture is VFX-only inside Locke's bin but is the mesh
            texture in the totem's, so consolidating on Locke's view alone moved it
            and broke the totem. Collect the non-VFX references from all bins first. */
+        /* The repath re-hashed every `file =` reference to its prefixed path, and
+           the only record of those paths is the `files.txt` it wrote. Register them
+           BEFORE judging what is protected. Without this every mesh texture that is
+           referenced by hash is invisible to the collection below, reads as
+           VFX-exclusive whenever an effect also names it, and gets moved: Qiyana's
+           weapon, Exalted Viego's body and swords. Finalize mode writes no files.txt
+           and needs none; its hashes are unbumped and resolve through the dictionary. */
+        let files_txt = content_dir.join("files.txt");
+        if let Ok(text) = std::fs::read_to_string(&files_txt) {
+            let registered = crate::bin::ritoshark_bridge::register_file_paths(text.lines());
+            tracing::info!(
+                "consolidate: registered {} repathed file= path(s) from files.txt",
+                registered
+            );
+        }
         let mut protected: crate::bin::bin_editor::ProtectedAssets = Default::default();
         for bin in &skin_bins {
             crate::bin::bin_editor::collect_protected_assets(bin, &mut protected);

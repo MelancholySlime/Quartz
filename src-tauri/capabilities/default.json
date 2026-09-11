@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for the main, startup, and design-lab windows",
-  "windows": ["main", "updater", "design-lab"],
+  "description": "Default capabilities for the main, startup, design-lab, and eyedropper-loupe windows",
+  "windows": ["main", "updater", "design-lab", "eyedropper-loupe"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
@@ -10,6 +10,10 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-maximize",
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-confirm",

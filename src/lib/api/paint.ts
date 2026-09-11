@@ -12,6 +12,10 @@ export interface ColorKeyframe {
 export interface ColorData {
     keyframes: ColorKeyframe[];
     isConstant: boolean;
+    storage: 'constant' | 'curve' | 'probabilityTables';
+    constantIndex: number | null;
+    supportsStructuralEdits: boolean;
+    supportsRetime: boolean;
 }
 
 export interface EmitterTexture {
@@ -177,6 +181,38 @@ export function paintSetColorAlpha(
     alphas: number[],
 ): Promise<VfxModel | null> {
     return invokeCommand<VfxModel | null>('paint_set_color_alpha', { sessionId, emitterKey, slot, alphas });
+}
+
+export type ColorSlot = 'color' | 'birthColor' | 'fresnelColor' | 'lingerColor';
+
+/** Create a missing color slot on an emitter (white ValueColor constant). */
+export function paintCreateColor(sessionId: number, emitterKey: string, slot: ColorSlot): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_create_color', { sessionId, emitterKey, slot });
+}
+
+/** Promote a constant color to an animated 2-key curve. */
+export function paintAnimateColor(sessionId: number, emitterKey: string, slot: ColorSlot): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_animate_color', { sessionId, emitterKey, slot });
+}
+
+/** Collapse an animated color back to a constant. */
+export function paintDeanimateColor(sessionId: number, emitterKey: string, slot: ColorSlot): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_deanimate_color', { sessionId, emitterKey, slot });
+}
+
+/** Append a keyframe (rgba @ time) to a color's curve. */
+export function paintAddKeyframe(sessionId: number, emitterKey: string, slot: ColorSlot, rgba: [number, number, number, number], time: number): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_add_keyframe', { sessionId, emitterKey, slot, rgba, time });
+}
+
+/** Delete keyframe `index` from a color's curve. */
+export function paintDeleteKeyframe(sessionId: number, emitterKey: string, slot: ColorSlot, index: number): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_delete_keyframe', { sessionId, emitterKey, slot, index });
+}
+
+/** Set keyframe `index`'s full RGBA and time. */
+export function paintSetKeyframe(sessionId: number, emitterKey: string, slot: ColorSlot, index: number, rgba: [number, number, number, number], time: number): Promise<VfxModel | null> {
+    return invokeCommand<VfxModel | null>('paint_set_keyframe', { sessionId, emitterKey, slot, index, rgba, time });
 }
 
 /** Undo the last edit. Returns the refreshed model, or null if nothing to undo. */

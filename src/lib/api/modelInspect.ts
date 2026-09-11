@@ -19,6 +19,9 @@ export interface ModelPreviewData {
     /** 4 bone weights per vertex, parallel to boneIndices. */
     boneWeights: number[];
     indices: number[];
+    /** Static (.scb/.sco) only: mesh vertex index each flattened preview vertex
+     *  came from. Empty for skinned meshes (preview index == mesh vertex). */
+    sourceIndices: number[];
     groups: ModelGroup[];
     vertexCount: number;
     triangleCount: number;
@@ -129,4 +132,41 @@ export function modelInspectAnimation(anmPath: string): Promise<AnimPreview> {
  *  tree (e.g. a bare .skn with no skin bin nearby). */
 export function modelInspectDiskAnimations(sknPath: string): Promise<string[]> {
     return invokeCommand<string[]>('model_inspect_disk_animations', { sknPath });
+}
+
+/** True when a `.scb` carries a per-vertex color block, so the recolor action
+ *  only offers itself on meshes it can actually edit. */
+export function meshHasVertexColors(path: string): Promise<boolean> {
+    return invokeCommand<boolean>('mesh_has_vertex_colors', { path });
+}
+
+/** Hue-rotate every vertex color of a `.scb` in place by `hueDegrees`
+ *  (saturation/lightness/alpha preserved). Resolves to the number of colors
+ *  changed. */
+export function meshRecolorHueShift(path: string, hueDegrees: number): Promise<number> {
+    return invokeCommand<number>('mesh_recolor_hue_shift', { path, hueDegrees });
+}
+
+/** Shift every vertex color of a `.scb` in HSL: add `hueDegrees`, scale
+ *  saturation by `satMul` and lightness by `lightMul`. Resolves to # changed. */
+export function meshRecolorHsl(path: string, hueDegrees: number, satMul: number, lightMul: number): Promise<number> {
+    return invokeCommand<number>('mesh_recolor_hsl', { path, hueDegrees, satMul, lightMul });
+}
+
+/** Tint every vertex color of a `.scb` toward `target` (RGB 0-255) by
+ *  `strength` (0..1). Resolves to # changed. */
+export function meshRecolorTint(path: string, target: [number, number, number], strength: number): Promise<number> {
+    return invokeCommand<number>('mesh_recolor_tint', { path, target, strength });
+}
+
+/** Replace a `.scb`'s whole per-vertex color block (one [r,g,b,a] per mesh
+ *  vertex). Used to save a 3D vertex-paint session. */
+export function meshApplyVertexColors(path: string, colors: [number, number, number, number][]): Promise<number> {
+    return invokeCommand<number>('mesh_apply_vertex_colors', { path, colors });
+}
+
+/** Ensure a `.scb` has a vertex-color block, generating an all-`fill` (RGBA)
+ *  one when absent. No-op when colors already exist. Resolves to # generated. */
+export function meshGenerateVertexColors(path: string, fill: [number, number, number, number]): Promise<number> {
+    return invokeCommand<number>('mesh_generate_vertex_colors', { path, fill });
 }

@@ -6,6 +6,7 @@ import type { ModelInspectChromaOption } from '@/lib/model/modelInspectEvent';
 import { buildClip, type AnimClip } from '@/lib/model/skinning';
 import { ModelViewport, type ModelSceneReady } from './ModelViewport';
 import { ModelControls } from './ModelControls';
+import { RecolorHub } from './RecolorHub';
 
 function animName(path: string): string {
     return (path.split(/[/\\]/).pop() || path).replace(/\.anm$/i, '');
@@ -217,6 +218,10 @@ export function ModelInspectModal({ path, initialTexturePath, initialTexturePath
     const reloadTextures = useCallback(() => {
         void sceneRef.current?.reloadAllTextures();
     }, []);
+
+    // Bumped after a vertex-color disk write (adjust/tint/generate/save-paint) to
+    // remount the viewport so it re-loads the mesh with the new on-disk colors.
+    const [recolorNonce, setRecolorNonce] = useState(0);
     const hasTextures = Boolean(
         initialTexturePath
         || Object.keys(initialTexturePaths ?? {}).length
@@ -278,6 +283,7 @@ export function ModelInspectModal({ path, initialTexturePath, initialTexturePath
                 <div className="model-inspect__body">
                     <div className="model-inspect__stage">
                         <ModelViewport
+                            key={`viewport-${recolorNonce}`}
                             path={path}
                             texturePath={showTexture ? texturePath : null}
                             texturePaths={showTexture ? initialTexturePaths : undefined}
@@ -293,6 +299,15 @@ export function ModelInspectModal({ path, initialTexturePath, initialTexturePath
                             onSceneReady={handleSceneReady}
                         />
                         <div className="model-inspect__hint">Drag to orbit · wheel to zoom · right-drag to pan</div>
+                        {/\.scb$/i.test(path) && (
+                            <RecolorHub
+                                key={`recolor-${recolorNonce}`}
+                                getScene={() => sceneRef.current}
+                                hasColors={(model?.colors?.length ?? 0) > 0}
+                                onWroteDisk={() => setRecolorNonce((v) => v + 1)}
+                                path={path}
+                            />
+                        )}
                         <ModelControls
                             model={model}
                             wireframe={wireframe} setWireframe={setWireframe}

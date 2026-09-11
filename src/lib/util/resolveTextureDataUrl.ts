@@ -8,6 +8,7 @@
 
 import { imgRecolorDecodeTexture } from '@/lib/api/imgrecolor';
 import { portResolveAssetPath } from '@/lib/api/wad';
+import { explorerResolvePath } from '@/lib/api/explorer';
 
 const CACHE_CAP = 48;
 /* assetPath|binPath -> data URL, or null when it can't be resolved/decoded. */
@@ -44,7 +45,17 @@ export function rgbaToDataUrl(rgbaB64: string, width: number, height: number): s
  *  Pass `force` to bypass the cache and re-read the file from disk (needed by the
  *  live texture reload/watcher: the file may have been edited in place). */
 export async function resolveDiskTextureDataUrl(diskPath: string, force = false): Promise<string | null> {
-    const key = `disk:${diskPath}`;
+    // Key on the file's last-modified time so an edited-in-place texture
+    // invalidates automatically (the old key was path-only, so a changed file
+    // kept serving the stale decode). A stat failure falls back to a path-only
+    // key rather than blocking the preview.
+    let mtime = 0;
+    try {
+        mtime = (await explorerResolvePath(diskPath)).modified;
+    } catch {
+        mtime = 0;
+    }
+    const key = `disk:${diskPath}:${mtime}`;
     if (!force) {
         const hit = cache.get(key);
         if (hit !== undefined) return hit;
@@ -63,21 +74,15 @@ export async function resolveDiskTextureDataUrl(diskPath: string, force = false)
 /** Resolve + decode a texture rel path to a PNG data URL (cached). Returns null
  *  if the asset can't be found on disk or fails to decode. */
 export async function resolveTextureDataUrl(assetPath: string, binPath: string): Promise<string | null> {
-    const key = `${assetPath}|${binPath}`;
-    const hit = cache.get(key);
-    if (hit !== undefined) return hit;
-
+    // Resolve the rel path to a disk path, then defer to the mtime-keyed
+    // disk resolver — do NOT add a second path-only cache layer here, or an
+    // edited file would be served stale from this outer cache even though the
+    // inner one invalidated on mtime.
     const diskPath = await portResolveAssetPath(assetPath, binPath).catch(() => null);
-    if (!diskPath) {
-        cacheSet(key, null);
-        return null;
-    }
+    if (!diskPath) return null;
     try {
-        const url = await resolveDiskTextureDataUrl(diskPath);
-        cacheSet(key, url);
-        return url;
+        return await resolveDiskTextureDataUrl(diskPath);
     } catch {
-        cacheSet(key, null);
         return null;
     }
 }

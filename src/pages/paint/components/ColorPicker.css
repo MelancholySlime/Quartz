@@ -118,6 +118,19 @@
     transform: translateY(-1px);
 }
 
+/* While a native screen pick is in progress: highlight and pulse so the user
+   knows to click somewhere on screen. */
+.paint-color-picker .pcp-pipette.is-picking {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    background: color-mix(in oklab, var(--accent-primary) 18%, var(--bg-tertiary));
+    animation: pcp-pipette-pulse 1s ease-in-out infinite;
+}
+@keyframes pcp-pipette-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent-primary) 45%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent-primary) 0%, transparent); }
+}
+
 .paint-color-picker .pcp-swatch {
     width: 28px;
     height: 28px;

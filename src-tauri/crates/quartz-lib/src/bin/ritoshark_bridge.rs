@@ -252,6 +252,45 @@ pub fn get_cached_bin_hashes() -> &'static RwLock<HashMapper> {
     })
 }
 
+/// Teach the shared mapper paths no dictionary knows, keyed by their xxh64.
+///
+/// A repath re-hashes every `file =` reference to its prefixed path and records
+/// those paths in the mod's `files.txt`; nothing else in the process learns them.
+/// Any later `resolve_file_hash` on such a bin then comes up empty, and the
+/// consumer that mattered was consolidate deciding what is VFX-exclusive: with
+/// the mesh's hashed references unresolvable it moved body and weapon textures
+/// into the particles folder. Feed the `files.txt` lines through here before
+/// that decision. Each line is hashed exactly as written, which is how
+/// `bump_hashed` minted the value, plus its lowercase form in case a caller
+/// normalised. Returns how many hashes were new to the mapper.
+pub fn register_file_paths<I>(paths: I) -> usize
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+{
+    let w = &mut *get_cached_bin_hashes().write();
+    let mut added = 0usize;
+    for p in paths {
+        let p = p.as_ref().trim();
+        if p.is_empty() {
+            continue;
+        }
+        let h = crate::hash::xxh64(p);
+        if w.get(h).is_none() {
+            w.insert(h, p.to_string());
+            added += 1;
+        }
+        let lower = p.to_ascii_lowercase();
+        if lower != p {
+            let hl = crate::hash::xxh64(&lower);
+            if w.get(hl).is_none() {
+                w.insert(hl, lower);
+            }
+        }
+    }
+    added
+}
+
 /// Reload the BIN hash cache from disk
 ///
 /// Call this after updating hash files to refresh the cache

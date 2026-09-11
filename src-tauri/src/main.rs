@@ -231,6 +231,12 @@ fn main() {
             commands::paint::paint_set_material_param,
             commands::paint::paint_set_texture,
             commands::paint::paint_set_color_alpha,
+            commands::paint::paint_create_color,
+            commands::paint::paint_animate_color,
+            commands::paint::paint_deanimate_color,
+            commands::paint::paint_add_keyframe,
+            commands::paint::paint_delete_keyframe,
+            commands::paint::paint_set_keyframe,
             commands::paint::paint_undo,
             commands::paint::paint_redo,
             commands::paint::paint_save,
@@ -354,6 +360,15 @@ fn main() {
             commands::model_inspect::model_inspect_skeleton,
             commands::model_inspect::model_inspect_animation,
             commands::model_inspect::model_inspect_disk_animations,
+            commands::model_inspect::mesh_has_vertex_colors,
+            commands::model_inspect::mesh_recolor_hue_shift,
+            commands::model_inspect::mesh_recolor_hsl,
+            commands::model_inspect::mesh_recolor_tint,
+            commands::model_inspect::mesh_apply_vertex_colors,
+            commands::model_inspect::mesh_generate_vertex_colors,
+            commands::screen_pick::screen_pick_color,
+            commands::screen_pick::screen_pick_confirm,
+            commands::screen_pick::screen_pick_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Quartz");

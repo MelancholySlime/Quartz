@@ -321,14 +321,26 @@ export default function usePort() {
         paused: isProcessing,
     });
 
-    /* Rewrite a texture path on an emitter (target or donor session). */
+    /* Rewrite a texture path on an emitter (target or donor session). Target
+       edits go through applyTargetModel so Undo and Save light up; the donor
+       column has no save of its own, so its edits only shape what gets ported
+       and the status line says so. */
     const handleSetTexture = useCallback(
         async (emitter: VfxEmitter, isTarget: boolean, oldPath: string, newPath: string) => {
             const sid = isTarget ? targetSessionId : donorSessionId;
             if (sid === null) return;
-            const model = await vfxSetTexture(sid, emitter.path, oldPath, newPath);
-            if (isTarget) applyTargetModel(model);
-            else setDonorModel(model);
+            try {
+                const model = await vfxSetTexture(sid, emitter.path, oldPath, newPath);
+                if (isTarget) {
+                    applyTargetModel(model);
+                    setStatusMessage(`Texture path updated on ${emitter.name}`);
+                } else {
+                    setDonorModel(model);
+                    setStatusMessage('Donor texture path updated (applies to porting; the donor file is not saved)');
+                }
+            } catch (e) {
+                setStatusMessage(`Failed to update texture: ${e instanceof Error ? e.message : String(e)}`);
+            }
         },
         [targetSessionId, donorSessionId, applyTargetModel]
     );

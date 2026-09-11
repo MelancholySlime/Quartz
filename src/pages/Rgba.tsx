@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Copy, RotateCcw, Pipette, Eye, EyeOff } from 'lucide-react';
-import { ColorPickerHost, openColorPicker, cleanupColorPickers } from './paint/components/ColorPicker';
+import { ColorPickerHost } from './paint/components/ColorPicker';
+import { openColorPicker, cleanupColorPickers } from './paint/components/colorPickerController';
 import './rgba/Rgba.css';
 
 type Vec4 = [number, number, number, number];

@@ -37,6 +37,13 @@ pub struct ModelPreview {
     /// 4 bone weights per vertex, parallel to `bone_indices`.
     pub bone_weights: Vec<f32>,
     pub indices: Vec<u32>,
+    /// For static (`.scb`/`.sco`) meshes: the mesh vertex index each flattened
+    /// preview vertex came from — `preview[k]` originated at
+    /// `mesh.positions[source_indices[k]]`. The static path flattens per face
+    /// corner (one mesh vertex maps to many preview vertices), so this is the
+    /// bridge needed to save painted colours back to the per-vertex block.
+    /// Empty for skinned meshes, where preview index == mesh vertex index.
+    pub source_indices: Vec<u32>,
     pub groups: Vec<ModelGroup>,
     pub vertex_count: usize,
     pub triangle_count: usize,
@@ -94,6 +101,7 @@ fn project_static(mesh: StaticMesh, path: &Path) -> ModelPreview {
     let mut uvs = Vec::with_capacity(mesh.faces.len() * 6);
     let mut colors = Vec::new();
     let mut indices = Vec::with_capacity(mesh.faces.len() * 3);
+    let mut source_indices = Vec::with_capacity(mesh.faces.len() * 3);
     let mut groups: Vec<ModelGroup> = Vec::new();
 
     for (face_index, face) in mesh.faces.iter().enumerate() {
@@ -128,6 +136,7 @@ fn project_static(mesh: StaticMesh, path: &Path) -> ModelPreview {
                 colors.extend(c.map(|v| v as f32 / 255.0));
             }
             indices.push((face_index * 3 + corner) as u32);
+            source_indices.push(source_index as u32);
         }
     }
 
@@ -148,6 +157,7 @@ fn project_static(mesh: StaticMesh, path: &Path) -> ModelPreview {
         bone_indices: Vec::new(), // static meshes have no skinning
         bone_weights: Vec::new(),
         indices,
+        source_indices,
         groups,
         vertex_count,
         triangle_count,
@@ -219,6 +229,7 @@ fn project_skinned(mesh: SkinnedMesh, path: &Path) -> ModelPreview {
         bone_indices,
         bone_weights,
         indices,
+        source_indices: Vec::new(), // skinned: preview index == mesh vertex index
         groups,
         vertex_count,
         triangle_count,

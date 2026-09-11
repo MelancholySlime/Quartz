@@ -8,48 +8,14 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Pipette } from 'lucide-react';
+import { pdbg, setPickerController, type PickerState } from './colorPickerController';
 import './ColorPicker.css';
 
-/** Opt-in alpha support: pass `alpha` (0..1) to render an alpha slider; the
- *  picker then reports alpha changes through `onAlpha`. Omit for RGB-only. */
-export interface ColorPickerOpts {
-    alpha?: number;
-    onAlpha?: (alpha: number) => void;
-}
-
-interface PickerState {
-    anchor: { left: number; top: number; bottom: number; right: number };
-    hex: string;
-    onCommit: (hex: string) => void;
-    alpha: number | null;
-    onAlpha?: (alpha: number) => void;
-}
-
-let openController: ((s: PickerState | null) => void) | null = null;
-
-export function openColorPicker(
-    event: { currentTarget?: Element | null; target?: EventTarget | null },
-    initialHex: string,
-    onCommit: (hex: string) => void,
-    opts?: ColorPickerOpts,
-): void {
-    const el = (event.currentTarget || event.target) as Element | null;
-    const rect = el && 'getBoundingClientRect' in el
-        ? (el as Element).getBoundingClientRect()
-        : ({ left: 100, top: 100, bottom: 130, right: 130 } as DOMRect);
-    openController?.({
-        anchor: { left: rect.left, top: rect.top, bottom: rect.bottom, right: rect.right },
-        hex: initialHex || '#808080',
-        onCommit,
-        alpha: opts?.alpha ?? null,
-        onAlpha: opts?.onAlpha,
-    });
-}
-
-export function cleanupColorPickers(): void {
-    openController?.(null);
-}
+// The imperative API (openColorPicker / cleanupColorPickers / ColorPickerOpts)
+// lives in ./colorPickerController so this file can export ONLY the component,
+// which keeps React Fast Refresh working (see that file's header).
 
 /* ── color math ─────────────────────────────────────────────────────────── */
 
@@ -97,26 +63,35 @@ export function ColorPickerHost() {
     const [v, setV] = useState(0);
     const [hexText, setHexText] = useState('#808080');
     const [alpha, setAlpha] = useState(1);
+    const [picking, setPicking] = useState(false);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const [pos, setPos] = useState({ left: 0, top: 0 });
 
     useEffect(() => {
-        openController = (next) => {
+        setPickerController((next) => {
+            pdbg('controller received state', next ? { hex: next.hex, alpha: next.alpha } : null);
             if (next) {
                 const [nh, ns, nv] = hexToHsv(next.hex);
+                pdbg('hexToHsv on open', next.hex, '->', { h: nh, s: ns, v: nv });
                 setH(nh); setS(ns); setV(nv);
                 setHexText(next.hex);
                 setAlpha(next.alpha ?? 1);
             }
             setState(next);
-        };
-        return () => { openController = null; };
+        });
+        pdbg('ColorPickerHost mounted — openController installed');
+        return () => { pdbg('ColorPickerHost unmounted — openController cleared'); setPickerController(null); };
     }, []);
 
     const commit = (nh: number, ns: number, nv: number) => {
         const hex = hsvToHex(nh, ns, nv);
         setHexText(hex);
-        state?.onCommit(hex);
+        if (!state?.onCommit) {
+            pdbg('commit skipped — no onCommit on state', { hex });
+            return;
+        }
+        pdbg('commit', { hsv: [nh, ns, nv], hex });
+        state.onCommit(hex);
     };
 
     useLayoutEffect(() => {
@@ -153,12 +128,14 @@ export function ColorPickerHost() {
         const rect = el.getBoundingClientRect();
         const ns = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const nv = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
+        pdbg('handleSv', { client: [e.clientX, e.clientY], rect: [rect.left, rect.top, rect.width, rect.height], ns, nv, h });
         setS(ns); setV(nv); commit(h, ns, nv);
     };
 
     const handleHue = (e: React.MouseEvent | MouseEvent, el: HTMLElement) => {
         const rect = el.getBoundingClientRect();
         const nh = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+        pdbg('handleHue', { clientX: e.clientX, rectLeft: rect.left, rectWidth: rect.width, nh, s, v });
         setH(nh); commit(nh, s, v);
     };
 
@@ -170,6 +147,7 @@ export function ColorPickerHost() {
     };
 
     const startDrag = (e: React.MouseEvent, el: HTMLElement, handler: (e: MouseEvent | React.MouseEvent, el: HTMLElement) => void) => {
+        pdbg('startDrag fired', { target: (e.target as HTMLElement)?.className, hasEl: !!el });
         e.preventDefault();
         handler(e, el);
         let frame = 0;
@@ -191,30 +169,36 @@ export function ColorPickerHost() {
         window.addEventListener('mouseup', up);
     };
 
+    // Native screen eyedropper. WebView2's built-in EyeDropper API is broken on
+    // some runtime builds (opens then instantly aborts "user canceled"), so this
+    // calls a Tauri command that reads the pixel under the OS cursor with GDI and
+    // waits for a left-click (Esc cancels). Works anywhere on the whole screen.
     const pickScreenColor = async () => {
-        const EyeDropperCtor = (window as Window & { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper;
-        if (!EyeDropperCtor) {
-            return;
-        }
+        setPicking(true);
         try {
-            const eyeDropper = new EyeDropperCtor();
-            const result = await eyeDropper.open();
-            if (result?.sRGBHex) {
-                const hex = result.sRGBHex.startsWith('#') ? result.sRGBHex : `#${result.sRGBHex}`;
+            const { invoke } = await import('@tauri-apps/api/core');
+            const hex = await invoke<string | null>('screen_pick_color');
+            pdbg('screen_pick_color returned', hex);
+            if (hex) {
                 const [nh, ns, nv] = hexToHsv(hex);
                 setH(nh); setS(ns); setV(nv);
                 setHexText(hex);
-                state?.onCommit(hex);
+                state?.onCommit?.(hex);
             }
-        } catch {
-            // User cancelled or the webview blocked the picker; keep the modal open.
+        } catch (err) {
+            pdbg('screen_pick_color failed', err);
+        } finally {
+            setPicking(false);
         }
     };
 
     const currentHex = hsvToHex(h, s, v);
     const hueHex = hsvToHex(h, 1, 1);
 
-    return (
+    // Paint lives inside the app's z-index: 1 work area, while its color editor
+    // is a body portal. The picker must share that overlay layer to appear on
+    // top, and to keep viewport anchor coordinates valid under blurred pages.
+    return createPortal(
         <div ref={rootRef} className="paint-color-picker" style={{ left: pos.left, top: pos.top }} onMouseDown={(e) => e.stopPropagation()}>
             <div
                 className="pcp-sv"
@@ -240,9 +224,10 @@ export function ColorPickerHost() {
             <div className="pcp-row">
                 <button
                     type="button"
-                    className="pcp-pipette"
+                    className={`pcp-pipette${picking ? ' is-picking' : ''}`}
                     onClick={pickScreenColor}
-                    title="Pick a color from the screen"
+                    disabled={picking}
+                    title={picking ? 'Click anywhere on screen to sample a color (Esc to cancel)' : 'Pick a color from the screen'}
                 >
                     <Pipette size={13} />
                 </button>
@@ -253,15 +238,19 @@ export function ColorPickerHost() {
                     onChange={(e) => {
                         const val = e.target.value;
                         setHexText(val);
-                        if (/^#?[0-9a-fA-F]{6}$/.test(val)) {
+                        const valid = /^#?[0-9a-fA-F]{6}$/.test(val);
+                        pdbg('hex input change', { val, valid });
+                        if (valid) {
                             const hx = val.startsWith('#') ? val : `#${val}`;
                             const [nh, ns, nv] = hexToHsv(hx);
                             setH(nh); setS(ns); setV(nv);
+                            pdbg('hex input commit', hx);
                             state.onCommit(hx);
                         }
                     }}
                 />
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

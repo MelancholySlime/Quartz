@@ -95,3 +95,91 @@ pub async fn model_inspect_disk_animations(skn_path: String) -> Result<Vec<Strin
     .await
     .map_err(|e| format!("disk animation task failed: {e}"))
 }
+
+/// True when the `.scb` at `path` carries a per-vertex color block, so the UI
+/// can offer "Recolor Vertex Colors" only on meshes it can actually edit.
+#[tauri::command]
+pub async fn mesh_has_vertex_colors(path: String) -> bool {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::scb_has_vertex_colors(Path::new(&path))
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// Hue-rotate every vertex color of the `.scb` at `path` in place by
+/// `hue_degrees` (saturation/lightness/alpha preserved). Returns the number of
+/// vertex colors changed.
+#[tauri::command]
+pub async fn mesh_recolor_hue_shift(path: String, hue_degrees: f32) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::hue_shift_scb(Path::new(&path), hue_degrees)
+            .map(|r| r.total())
+    })
+    .await
+    .map_err(|e| format!("mesh recolor task failed: {e}"))?
+}
+
+/// Shift every vertex color of the `.scb` at `path` in HSL: add `hue_degrees`,
+/// scale saturation by `sat_mul` and lightness by `light_mul`. Returns the
+/// number of vertex colors changed.
+#[tauri::command]
+pub async fn mesh_recolor_hsl(
+    path: String,
+    hue_degrees: f32,
+    sat_mul: f32,
+    light_mul: f32,
+) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::hsl_shift_scb(Path::new(&path), hue_degrees, sat_mul, light_mul)
+            .map(|r| r.total())
+    })
+    .await
+    .map_err(|e| format!("mesh recolor task failed: {e}"))?
+}
+
+/// Tint every vertex color of the `.scb` at `path` toward `target` (RGB, 0-255)
+/// by `strength` (0..1). Returns the number of vertex colors changed.
+#[tauri::command]
+pub async fn mesh_recolor_tint(
+    path: String,
+    target: [u8; 3],
+    strength: f32,
+) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::tint_scb(Path::new(&path), target, strength).map(|r| r.total())
+    })
+    .await
+    .map_err(|e| format!("mesh recolor task failed: {e}"))?
+}
+
+/// Replace the whole per-vertex color block of the `.scb` at `path` with
+/// `colors` (one `[r,g,b,a]` per mesh vertex, parallel to `positions`). Used to
+/// save a 3D vertex-paint session. Errors when the count mismatches.
+#[tauri::command]
+pub async fn mesh_apply_vertex_colors(
+    path: String,
+    colors: Vec<[u8; 4]>,
+) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::apply_vertex_colors_scb(Path::new(&path), &colors)
+            .map(|r| r.total())
+    })
+    .await
+    .map_err(|e| format!("mesh recolor task failed: {e}"))?
+}
+
+/// Ensure the `.scb` at `path` has a per-vertex color block, generating an
+/// all-`fill` (RGBA) one when absent. No-op when colors already exist. Returns
+/// the number of vertex colors generated (`0` when already present).
+#[tauri::command]
+pub async fn mesh_generate_vertex_colors(
+    path: String,
+    fill: [u8; 4],
+) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        quartz_lib::mesh_recolor::ensure_vertex_colors_scb(Path::new(&path), fill).map(|r| r.total())
+    })
+    .await
+    .map_err(|e| format!("mesh recolor task failed: {e}"))?
+}

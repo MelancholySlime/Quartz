@@ -17,6 +17,7 @@ pub mod hash;
 pub mod longpath;
 pub mod linked_bins;
 pub mod mesh;
+pub mod mesh_recolor;
 pub mod model_bridge;
 pub mod model_preview;
 pub mod paint;

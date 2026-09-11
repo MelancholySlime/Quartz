@@ -312,16 +312,26 @@ pub struct ResolvedPath {
     pub exists: bool,
     pub is_dir: bool,
     pub is_file: bool,
+    /// Last-modified time in epoch milliseconds (0 when unavailable). Lets the
+    /// texture-preview cache key on it so an edited-in-place file invalidates.
+    pub modified: u64,
 }
 
 #[tauri::command]
 pub fn explorer_resolve_path(path: String) -> ResolvedPath {
     let resolved = expand_env(&path);
     let meta = std::fs::metadata(Path::new(&resolved)).ok();
+    let modified = meta
+        .as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
     ResolvedPath {
         exists: meta.is_some(),
         is_dir: meta.as_ref().map(|m| m.is_dir()).unwrap_or(false),
         is_file: meta.as_ref().map(|m| m.is_file()).unwrap_or(false),
+        modified,
         resolved,
     }
 }

@@ -160,7 +160,9 @@ mod imp {
         // way, so the fields are confirmed rather than copied across.
         v("02fantometomodpkg", "Convert to .modpkg", "fantome-to-modpkg"),
     ];
-    // A .modpkg package, unpacked into a sibling `_<name>` folder.
+    // A .modpkg package, unpacked into a sibling `_<name>` folder as a standard mod
+    // project (`mod.config.json` + `content/<layer>/<wad>/`), the layout Celestial and
+    // league-mod read.
     const MODPKG: &[Verb] = &[v("01unpackmodpkg", "Unpack Modpkg", "unpack-modpkg")];
 
     // ── Folder menu ─────────────────────────────────────────────────────────
@@ -207,8 +209,9 @@ mod imp {
         ),
         // Pack a mod folder (one holding META/info.json) into a .fantome.
         v("21zipfantome", "Zip Fantome", "zip-fantome"),
-        // Repack a folder produced by "Unpack Modpkg" back into its .modpkg,
-        // overwriting the original. Refuses a folder with no origin marker.
+        // Pack a mod project (`mod.config.json`) into a .modpkg, overwriting the
+        // original when the origin marker names it. Also takes the flat tree older
+        // Quartz builds unpacked to. Refuses a folder that is neither.
         v("22packmodpkg", "Pack Modpkg", "pack-modpkg"),
     ];
 

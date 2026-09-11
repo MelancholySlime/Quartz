@@ -225,6 +225,76 @@ pub async fn paint_set_color_alpha(
     session::set_color_alpha(session_id, &emitter_key, &slot, &alphas).map_err(|e| e.to_string())
 }
 
+/// Create a missing color (color/birthColor/fresnelColor/lingerColor) on an
+/// emitter as a white `ValueColor` constant. Returns the refreshed model, or
+/// null if the slot already existed / the emitter was unknown.
+#[tauri::command]
+pub async fn paint_create_color(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+) -> Result<Option<VfxModel>, String> {
+    session::create_color(session_id, &emitter_key, &slot).map_err(|e| e.to_string())
+}
+
+/// Promote a constant color to an animated 2-key curve.
+#[tauri::command]
+pub async fn paint_animate_color(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+) -> Result<Option<VfxModel>, String> {
+    session::animate_color(session_id, &emitter_key, &slot).map_err(|e| e.to_string())
+}
+
+/// Collapse an animated color back to a constant (first keyframe).
+#[tauri::command]
+pub async fn paint_deanimate_color(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+) -> Result<Option<VfxModel>, String> {
+    session::deanimate_color(session_id, &emitter_key, &slot).map_err(|e| e.to_string())
+}
+
+/// Append a keyframe (rgba @ time) to a color's curve, animating a constant if
+/// needed.
+#[tauri::command]
+pub async fn paint_add_keyframe(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+    rgba: [f32; 4],
+    time: f32,
+) -> Result<Option<VfxModel>, String> {
+    session::add_keyframe(session_id, &emitter_key, &slot, rgba, time).map_err(|e| e.to_string())
+}
+
+/// Delete keyframe `index` from a color's curve.
+#[tauri::command]
+pub async fn paint_delete_keyframe(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+    index: usize,
+) -> Result<Option<VfxModel>, String> {
+    session::delete_keyframe(session_id, &emitter_key, &slot, index).map_err(|e| e.to_string())
+}
+
+/// Set keyframe `index`'s full RGBA and time.
+#[tauri::command]
+pub async fn paint_set_keyframe(
+    session_id: u64,
+    emitter_key: String,
+    slot: String,
+    index: usize,
+    rgba: [f32; 4],
+    time: f32,
+) -> Result<Option<VfxModel>, String> {
+    session::set_keyframe(session_id, &emitter_key, &slot, index, rgba, time)
+        .map_err(|e| e.to_string())
+}
+
 /// Undo the last edit. Returns the refreshed model, or null if nothing to undo.
 #[tauri::command]
 pub async fn paint_undo(session_id: u64) -> Result<Option<VfxModel>, String> {

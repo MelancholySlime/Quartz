@@ -1,7 +1,8 @@
 import { Check, RotateCcw } from 'lucide-react';
 import { useThemeStore } from '@/lib/stores';
 import { BUILTIN_VARIANTS } from '@/lib/theme/builtinThemes';
-import { openColorPicker, ColorPickerHost } from '@/pages/paint/components/ColorPicker';
+import { ColorPickerHost } from '@/pages/paint/components/ColorPicker';
+import { openColorPicker } from '@/pages/paint/components/colorPickerController';
 import type { Theme } from '@/lib/theme/types';
 import './ThemeCardGrid.css';
 

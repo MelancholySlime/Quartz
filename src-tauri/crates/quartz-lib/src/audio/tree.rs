@@ -133,6 +133,11 @@ fn group_audio_files(
     }
 
     let mut root = BnkNode::dir(root_name.to_string());
+    /* Entries no mapping claimed. These land at the ROOT named `<id>.wem`, which is the
+       "random names" symptom: the bank loaded fine, but nothing told the tree which event
+       plays this wem. Distinct from `mappings.len()`, which counts event->wem edges and
+       stays healthy even when most wems are unreachable. */
+    let mut unmatched = 0usize;
 
     for entry in entries {
         let mut inserted = false;
@@ -172,6 +177,9 @@ fn group_audio_files(
             inserted = true;
         }
 
+        if !inserted {
+            unmatched += 1;
+        }
         if !inserted && !root.has_audio_child(entry.id) {
             let audio = to_audio_data(entry);
             root.children
@@ -179,6 +187,14 @@ fn group_audio_files(
                 .push(BnkNode::leaf(format!("{}.wem", entry.id), audio));
         }
     }
+
+    let distinct_mapped = mappings_by_wem.len();
+    eprintln!(
+        "[load_banks]   tree: entries={} distinctMappedWems={} unmatched(at root)={}",
+        entries.len(),
+        distinct_mapped,
+        unmatched,
+    );
 
     root
 }
@@ -386,12 +402,50 @@ fn resolve_mappings(bin_data: &[u8], events_bnk: Option<&[u8]>) -> Vec<EventMapp
     let events = event_mapper::extract_bin_events(bin_data);
 
     if let Some(bnk_data) = events_bnk {
-        if let Ok(Some(hirc_data)) = hirc::parse_hirc_from_bnk(bnk_data) {
-            let mapped = event_mapper::map_events_to_wem(&events, &hirc_data);
-            if !mapped.is_empty() {
-                return mapped;
+        /* Report each stage separately. A bank that resolves to raw wem ids can fail at
+           three different points and they look identical in the UI: no event NAMES out of
+           the BIN, a HIRC that would not parse, or a HIRC that parsed but whose events do
+           not reach any of this bank's wems. */
+        match hirc::parse_hirc_from_bnk(bnk_data) {
+            Ok(Some(hirc_data)) => {
+                let mapped = event_mapper::map_events_to_wem(&events, &hirc_data);
+                eprintln!(
+                    "[load_banks] hirc ok: events(bin)={} hirc.events={} actions={} sounds={} randomCntr={} switchCntr={} -> mapped={}",
+                    events.len(),
+                    hirc_data.events.len(),
+                    hirc_data.event_actions.len(),
+                    hirc_data.sounds.len(),
+                    hirc_data.random_containers.len(),
+                    hirc_data.switch_containers.len(),
+                    mapped.len(),
+                );
+                /* Container CHILD counts, not just container counts. Every Play action in
+                   a champion bank targets a container rather than a Sound directly, so if
+                   the child lists come back empty the walk reaches nothing and mapped is 0
+                   - while the container count still looks healthy. That is the difference
+                   between "the HIRC parsed" and "the HIRC parsed correctly". */
+                let rc_children: usize =
+                    hirc_data.random_containers.iter().map(|c| c.sound_ids.len()).sum();
+                let sc_children: usize =
+                    hirc_data.switch_containers.iter().map(|c| c.children.len()).sum();
+                eprintln!(
+                    "[load_banks]   container children: random={rc_children} switch={sc_children}"
+                );
+                if !mapped.is_empty() {
+                    return mapped;
+                }
             }
+            Ok(None) => eprintln!(
+                "[load_banks] events bank has NO HIRC section (events(bin)={})",
+                events.len()
+            ),
+            Err(e) => eprintln!("[load_banks] HIRC parse FAILED: {e} (events(bin)={})", events.len()),
         }
+    } else {
+        eprintln!(
+            "[load_banks] no events bank supplied (events(bin)={})",
+            events.len()
+        );
     }
 
     // Fallback: treat each BIN string's hash as a direct wem id.
@@ -440,6 +494,18 @@ pub fn load_banks(
     let mut used_bin_path = String::new();
     let mut mappings: Vec<EventMapping> = Vec::new();
     let events_bnk_data = read(bnk_path);
+
+    /* What actually arrived. A group whose events bank or BIN never made it this far
+       resolves to raw wem ids, and that is indistinguishable in the UI from a mapping
+       that ran and found nothing - so log the inputs BEFORE any of the passes. */
+    eprintln!(
+        "[load_banks] in: events_bnk={:?} audio={:?} bin={:?} | events_bnk_read={} bin_candidates={}",
+        file_name(bnk_path),
+        file_name(wpk_path),
+        file_name(bin_path),
+        events_bnk_data.is_some(),
+        bin_candidates.len(),
+    );
 
     // First pass: BIN + events BNK mapping.
     if events_bnk_data.is_some() && !bin_candidates.is_empty() {
@@ -509,6 +575,15 @@ pub fn load_banks(
 
     let audio_files: Vec<AudioData> = entries.iter().map(to_audio_data).collect();
     let file_count = audio_files.len();
+
+    // The outcome, in the terms the tree is built from: mappings==0 means every node is
+    // named by raw wem id, which is exactly the "random names" symptom.
+    eprintln!(
+        "[load_banks] out: kind={final_type} wems={} mappings={} used_bin={:?}",
+        entries.len(),
+        mappings.len(),
+        file_name(&used_bin_path),
+    );
 
     let mut tree = group_audio_files(&entries, &mappings, &source_name);
     scope_ids(&mut tree, &scope_key, &[]);

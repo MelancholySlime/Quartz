@@ -1299,156 +1299,212 @@ fn file_stem(p: &Path) -> String {
 
 /* ── .modpkg <-> folder ──────────────────────────────────────────────────── */
 
-/// The marker naming the folder a `.modpkg` was unpacked from.
+/// The marker naming the archive a folder was unpacked from.
 ///
-/// Written at the root of the unpacked folder so `pack-modpkg` can rebuild the
-/// package under its ORIGINAL name and metadata, rather than guessing from the folder.
-/// Also the thing that identifies the folder as repackable at all.
+/// Written at the project root so `pack-modpkg` can write the package back under its
+/// ORIGINAL file name, overwriting it, rather than under the `<name>_<version>.modpkg` a
+/// fresh pack would choose. Everything else about the package now lives in
+/// `mod.config.json`, the standard mod-project config, so the marker carries only the
+/// file name; a project unpacked by another tool (no marker) still packs.
 const MODPKG_MARKER: &str = ".modpkg-origin.json";
 
-/// Unpack a `.modpkg` into a sibling folder.
+/// Unpack a `.modpkg` into a sibling folder, as a standard mod project.
 ///
 /// The folder is named `_<stem>`. The leading underscore keeps the unpacked tree
 /// distinguishable from the archive's own stem, and is a one-character prefix so deep
 /// chunk paths have as much room as possible before Windows' path limits bite.
 ///
-/// Layout mirrors what the package holds, so the round-trip is mechanical:
-///   `<layer>/<Wad>.wad.client/<chunk path>`
+/// The layout is the `league-mod` project layout, the one Celestial's unpack writes, so
+/// a folder either tool unpacks is one the other packs:
+///   `mod.config.json`
+///   `content/<layer>/<wad>.wad.client/<chunk path>`
+///   `hashes/<category>.hashes.txt`             (the declared hashtables, if any)
+///   `README.md`, `LICENSE`, `thumbnail.webp`   (if the package carries them)
+///
+/// The extraction is `ltk_mod_project`'s own, so this cannot drift from the standard by
+/// restating it. Quartz used to write a flat `<layer>/<wad>/` tree of its own here, which
+/// nothing else read: a folder unpacked by Quartz could not be packed by Celestial or
+/// league-mod, and the other way round. `pack_modpkg` still accepts that old tree.
+///
+/// A chunk the package stores under a hex name (its path was never known) comes out as
+/// that hex name, exactly as the crate writes it. What Quartz adds is the extension:
+/// the type is still recoverable from the bytes, so it is sniffed with LeagueToolkit's
+/// own magic table and appended, which turns a folder of opaque hex files into ones a
+/// double-click opens. It costs nothing on the way back: a hex chunk name is parsed as
+/// the hash up to the first `.`, so `<hex>.dds` repacks to exactly the chunk `<hex>` was.
 fn unpack_modpkg(archive_path: &Path) -> Result<String, String> {
-    let file = std::fs::File::open(archive_path).map_err(|e| e.to_string())?;
-    let mut pkg = ltk_modpkg::Modpkg::mount_from_reader(std::io::BufReader::new(file))
-        .map_err(|e| format!("not a readable modpkg: {e}"))?;
+    use ltk_mod_project::modpkg::ModpkgImporter;
+    use ltk_mod_project::ProjectImporter;
 
+    let file = std::fs::File::open(archive_path).map_err(|e| e.to_string())?;
     let parent = archive_path.parent().unwrap_or_else(|| Path::new("."));
     let out_dir = unique_dir(parent, &format!("_{}", file_stem(archive_path)));
-    std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let out_utf8 = camino::Utf8PathBuf::from_path_buf(out_dir.clone())
+        .map_err(|p| format!("output path is not UTF-8: {}", p.display()))?;
 
-    // The metadata is what lets `pack-modpkg` rebuild an identical package. Stored as
-    // JSON beside the content rather than msgpack, so a human can read and edit it.
-    let metadata = pkg.load_metadata().map_err(|e| e.to_string())?;
-    let origin = serde_json::json!({
-        "archive_name": name(archive_path),
-        "metadata": metadata,
-    });
+    // The importer creates the directory, extracts every layer under `content/`, puts
+    // the readme, license, thumbnail and hashtables where the project keeps them, and
+    // writes `mod.config.json` last.
+    let project = match ProjectImporter::new(out_utf8)
+        .import(ModpkgImporter::new(std::io::BufReader::new(file)))
+    {
+        Ok(project) => project,
+        Err(e) => {
+            // `unique_dir` handed out a fresh path, so this directory holds nothing but
+            // what this failed unpack wrote.
+            let _ = std::fs::remove_dir_all(&out_dir);
+            return Err(format!("failed to unpack modpkg: {e}"));
+        }
+    };
+
+    let origin = serde_json::json!({ "archive_name": name(archive_path) });
     std::fs::write(
         out_dir.join(MODPKG_MARKER),
         serde_json::to_string_pretty(&origin).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
 
-    // Enumerate by the (WAD, layer) grid rather than by `chunk.wad()`. A chunk can be
-    // registered under SEVERAL WADs, and `chunk.wad()` reports only one of them, so
-    // walking the chunk map would drop every extra registration and the repack would
-    // put the chunk back under a single WAD. `chunks_for_wad_layer` lists a shared
-    // chunk under each WAD that claims it, which is what the round-trip needs.
-    //
-    // The tables are snapshotted first because the chunk reads below need `&mut pkg`.
-    let paths = pkg.chunk_paths().clone();
-    // Resolve each layer's TABLE POSITION by name. `layers()` is a HashMap, so its
-    // iteration order says nothing about the on-disk index; pairing it with an
-    // enumeration counter would address the wrong layer whenever there is more than one.
-    let layer_list: Vec<String> = pkg.layers().values().map(|l| l.name.clone()).collect();
-    let layer_names: Vec<(ltk_modpkg::LayerIndex, String)> = layer_list
-        .into_iter()
-        .filter_map(|n| pkg.layer_index(&n).map(|i| (i, n)))
-        .collect();
-    let wad_names: Vec<(ltk_modpkg::WadIndex, String)> = (0..pkg.wad_count())
-        .filter_map(|i| {
-            let idx = ltk_modpkg::WadIndex::new(i as u32);
-            pkg.wad_name_for_index(idx).map(|n| (idx, n.to_string()))
-        })
-        .collect();
-
-    // `(destination, key)` pairs, gathered before any read so the loads can borrow
-    // `pkg` mutably without fighting the tables above.
-    // `(destination, chunk, name came from the hash)`. The third field marks a chunk
-    // that has no recorded path, so its extension is sniffed from the bytes at write
-    // time; the bytes are not loaded yet here.
-    let mut planned: Vec<(PathBuf, ltk_modpkg::ChunkKey, bool)> = Vec::new();
-    for (layer_idx, layer_name) in &layer_names {
-        for (wad_idx, wad_name) in &wad_names {
-            for key in pkg.chunks_for_wad_layer(*wad_idx, *layer_idx) {
-                // The path table is keyed by `xxh64(path string)`, but a HEX-named chunk
-                // records the PARSED value as its hash, so the two never match and the
-                // lookup misses for every such chunk. Skipping on a miss silently
-                // dropped them: an archive whose paths were lost unpacked to almost
-                // nothing. A chunk with no resolvable path IS its hash, so the hex form
-                // is the name, and it round-trips back to exactly this chunk on repack.
-                let hex;
-                let mut from_hash = false;
-                let rel = match paths.get(&key.path) {
-                    Some(p) => p,
-                    None => {
-                        from_hash = true;
-                        hex = format!("{:016x}", key.path.value());
-                        &hex
-                    }
-                };
-                // The meta folder describes the package, and the marker above already
-                // carries it; the builder regenerates those chunks on repack.
-                if rel == ltk_modpkg::METADATA_FOLDER_NAME
-                    || rel.starts_with(&format!("{}/", ltk_modpkg::METADATA_FOLDER_NAME))
-                {
-                    continue;
-                }
-                let mut out_path = out_dir.join(layer_name);
-                out_path.push(wad_name);
-                // Rebuild the chunk path component by component, dropping anything that
-                // could escape the output directory.
-                for seg in rel.split('/') {
-                    if seg.is_empty() || seg == ".." || seg == "." {
-                        continue;
-                    }
-                    out_path.push(seg);
-                }
-                planned.push((out_path, *key, from_hash));
-            }
-        }
-    }
-
-    let mut extracted = 0usize;
-    for (mut out_path, key, from_hash) in planned {
-        let Ok(data) = pkg.load_chunk_decompressed(key) else {
+    // The extension pass. Only a bare 16-hex file name qualifies: anything with a dot
+    // already says what it is, and a real path is never sixteen hex digits.
+    let mut files = Vec::new();
+    walk_all(&out_dir.join(ltk_mod_project::CONTENT_DIR_NAME), &mut files);
+    let extracted = files.len();
+    for abs in files {
+        let Some(file_name) = abs.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        // A hash-named chunk carries no extension, which leaves a folder of opaque hex
-        // files that no tool will open by double-click. The type is still recoverable
-        // from the bytes, so it is sniffed with LeagueToolkit's own magic table (the
-        // same crate family as the modpkg reader, so both agree on what a file is).
-        //
-        // This does NOT cost the round-trip: a hex chunk name is parsed as the hash up
-        // to the first `.`, so `<hex>.dds` repacks to exactly the chunk `<hex>` did.
-        if from_hash {
-            if let Some(ext) = ltk_file::LeagueFileKind::identify_from_bytes(&data).extension() {
-                out_path.set_extension(ext);
-            }
+        if file_name.len() != 16 || !file_name.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
         }
-        if let Some(dir) = out_path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let Ok(data) = std::fs::read(&abs) else {
+            continue;
+        };
+        let Some(ext) = ltk_file::LeagueFileKind::identify_from_bytes(&data).extension() else {
+            continue;
+        };
+        let renamed = abs.with_extension(ext);
+        if !renamed.exists() {
+            let _ = std::fs::rename(&abs, &renamed);
         }
-        std::fs::write(&out_path, &data).map_err(|e| e.to_string())?;
-        extracted += 1;
     }
 
     Ok(format!(
-        "{} -> {}/ ({extracted} files)",
+        "{} -> {}/ ({extracted} files, {} layer(s))",
         name(archive_path),
-        name(&out_dir)
+        name(&out_dir),
+        project.layers.len()
     ))
 }
 
-/// Repack a folder produced by [`unpack_modpkg`] back into its `.modpkg`.
+/// Pack an unpacked mod project back into its `.modpkg`.
 ///
-/// Writes the archive under the name recorded in the marker and OVERWRITES it, so the
-/// unpack -> edit -> pack round-trip lands on the same file the user started from
-/// rather than accumulating copies.
+/// Writes the archive under the name the origin marker records and OVERWRITES it, so
+/// the unpack -> edit -> pack round-trip lands on the file the user started from rather
+/// than accumulating copies. A project with no marker (unpacked by another tool, or
+/// written by hand) is packed beside its folder as `<name>_<version>.modpkg`.
+///
+/// Two layouts are accepted. A folder holding `mod.config.json` (or `.toml`) is a
+/// standard mod project and goes through `ltk_mod_project`'s packer, the reader of the
+/// layout [`unpack_modpkg`] writes. A folder holding only the origin marker is one an
+/// older Quartz unpacked into its flat `<layer>/<wad>/` tree; that path is kept so those
+/// folders still pack.
 fn pack_modpkg(dir: &Path) -> Result<String, String> {
-    use ltk_modpkg::builder::{ModpkgBuilder, ModpkgChunkBuilder, ModpkgLayerBuilder};
-    use ltk_modpkg::ModpkgCompression;
-
     if !dir.is_dir() {
         return Err(format!("{} is not a folder", name(dir)));
     }
+    if dir.join("mod.config.json").is_file() || dir.join("mod.config.toml").is_file() {
+        return pack_modpkg_project(dir);
+    }
+    if dir.join(MODPKG_MARKER).is_file() {
+        return pack_modpkg_legacy(dir);
+    }
+    Err(format!(
+        "no mod.config.json or {MODPKG_MARKER} inside {}: unpack a .modpkg first",
+        name(dir)
+    ))
+}
+
+/// The archive file name a folder packs to: the origin marker's, else `fallback`.
+fn modpkg_archive_name(dir: &Path, fallback: impl FnOnce() -> String) -> String {
+    std::fs::read_to_string(dir.join(MODPKG_MARKER))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|marker| {
+            marker
+                .get("archive_name")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(fallback)
+}
+
+/// Pack a standard mod project (`mod.config.json` + `content/`) into a `.modpkg`.
+///
+/// The packer is `ltk_mod_project`'s, the same one Celestial's "Pack Modpkg" runs, so
+/// the two produce the same package from the same folder: layers and priorities from
+/// the config, chunks from `content/`, the declared hashtables re-embedded, a 16-hex
+/// file at a WAD root read back as the hash it is.
+fn pack_modpkg_project(dir: &Path) -> Result<String, String> {
+    use ltk_mod_project::modpkg::ModpkgFormat;
+    use ltk_mod_project::{PackageFormat, ProjectPacker};
+
+    let dir_utf8 = camino::Utf8PathBuf::from_path_buf(dir.to_path_buf())
+        .map_err(|p| format!("project path is not UTF-8: {}", p.display()))?;
+    let packer = ProjectPacker::from_dir(dir_utf8)
+        .map_err(|e| format!("could not read the mod project in {}: {e}", name(dir)))?;
+    let archive_name = modpkg_archive_name(dir, || {
+        packer
+            .project()
+            .package_file_name(None, PackageFormat::Modpkg)
+    });
+
+    // Written beside the folder to a temp name, verified, then moved over the target:
+    // a pack that fails halfway never leaves a truncated archive under the real name.
+    let parent = dir.parent().unwrap_or_else(|| Path::new("."));
+    let out_path = parent.join(&archive_name);
+    let tmp_path = parent.join(format!("{archive_name}.tmp"));
+    {
+        // The builder buffers the writer itself, so the file goes in bare.
+        let file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        if let Err(e) = packer.pack(ModpkgFormat::new(file)) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(format!("failed to pack {}: {e}", name(dir)));
+        }
+    }
+    // Scoped so the verifying mount has released the file before the rename.
+    let chunks = {
+        let file = std::fs::File::open(&tmp_path).map_err(|e| e.to_string())?;
+        match ltk_modpkg::Modpkg::mount_from_reader(std::io::BufReader::new(file)) {
+            Ok(pkg) => pkg.chunks().len(),
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(format!("rebuilt modpkg failed verification: {e}"));
+            }
+        }
+    };
+    let _ = std::fs::remove_file(&out_path);
+    std::fs::rename(&tmp_path, &out_path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        e.to_string()
+    })?;
+
+    Ok(format!(
+        "{}/ -> {} ({chunks} chunks)",
+        name(dir),
+        name(&out_path)
+    ))
+}
+
+/// Pack a folder an older Quartz unpacked into its flat `<layer>/<wad>/` tree.
+///
+/// That tree carried the package metadata in the origin marker rather than in a
+/// `mod.config.json`, so it is rebuilt from there. New unpacks never produce it; this
+/// exists so a folder unpacked before the standard layout still packs.
+fn pack_modpkg_legacy(dir: &Path) -> Result<String, String> {
+    use ltk_modpkg::builder::{ModpkgBuilder, ModpkgChunkBuilder, ModpkgLayerBuilder};
+    use ltk_modpkg::ModpkgCompression;
+
     let marker_path = dir.join(MODPKG_MARKER);
     if !marker_path.exists() {
         return Err(format!(
@@ -1746,9 +1802,16 @@ fn ask_modpkg_metadata(fallback_name: &str) -> ModpkgAsk {
 /// Build a modpkg from `(wad name -> chunks)` and write it to `out_path`.
 ///
 /// Shared by both converters so the two produce comparable packages: one `base` layer,
-/// the same chunk-naming rule, the same metadata shape.
+/// the same chunk-naming rule, the same metadata shape, the same embedded `game` table.
+///
+/// `known` is the mod's own `hash -> path` record (its `files.txt`), already applied to
+/// the entries by `apply_known_paths`. It is passed again for the chunks that STAYED
+/// hex-named: any name it holds for one of those is declared in the package's `game`
+/// hashtable, which is where the standard says a package carries the paths it cannot
+/// express in its chunk-path table. See `game_table_for_unnamed`.
 fn write_modpkg_from_wads(
     wads: Vec<(String, Vec<(String, Vec<u8>)>)>,
+    known: &std::collections::HashMap<u64, String>,
     ask: &ModpkgAsk,
     champion: Option<String>,
     out_path: &Path,
@@ -1769,6 +1832,9 @@ fn write_modpkg_from_wads(
         champions: champion.into_iter().collect(),
         maps: Vec::new(),
         layers: Vec::new(),
+        // Declared through `with_hashtable` below; the builder fills this in from
+        // those calls when it writes, so nothing is listed here by hand.
+        hashtables: Vec::new(),
     };
 
     // One `base` layer: a converted mod has no variants to separate, and the format
@@ -1779,6 +1845,11 @@ fn write_modpkg_from_wads(
     let mut chunk_data: std::collections::HashMap<ltk_modpkg::ChunkKey, Vec<u8>> =
         std::collections::HashMap::new();
 
+    // The hashes of the chunks that go in under a hex name: nothing could name them, so
+    // the package's chunk-path table cannot say what they are. The `game` table below is
+    // the standard's home for whatever name the mod's own record holds for them.
+    let mut unnamed: Vec<u64> = Vec::new();
+
     for (wad_name, entries) in wads {
         for (rel, bytes) in entries {
             // A 16-hex stem IS the chunk hash, not something to hash: hashing the hex
@@ -1787,6 +1858,9 @@ fn write_modpkg_from_wads(
             let stem = file_name.split('.').next().unwrap_or(file_name);
             let is_hex = stem.len() == 16 && stem.bytes().all(|b| b.is_ascii_hexdigit());
             let cb = if is_hex {
+                if let Ok(hash) = u64::from_str_radix(stem, 16) {
+                    unnamed.push(hash);
+                }
                 ModpkgChunkBuilder::new()
                     .with_hashed_chunk_name(&rel)
                     .map_err(|e| format!("invalid chunk name {rel:?}: {e}"))?
@@ -1808,6 +1882,13 @@ fn write_modpkg_from_wads(
         return Err("no WAD chunks found to pack".to_string());
     }
 
+    if let Some((manifest, table)) = game_table_for_unnamed(known, &unnamed)? {
+        let declared = manifest.path.clone();
+        builder = builder
+            .with_hashtable(manifest, table)
+            .map_err(|e| format!("failed to declare hashtable {declared}: {e}"))?;
+    }
+
     let mut out = std::io::Cursor::new(Vec::<u8>::new());
     builder
         .build_to_writer(&mut out, |cb| {
@@ -1827,6 +1908,82 @@ fn write_modpkg_from_wads(
 
     std::fs::write(out_path, &bytes).map_err(|e| e.to_string())?;
     Ok(chunk_data.len())
+}
+
+/// The `game` hashtable a package embeds for its hex-named chunks, or `None` when there
+/// is nothing to carry.
+///
+/// `recorded` is the mod's own `hash -> path` record (its `files.txt`); `unnamed` the
+/// hashes of the chunks the package stores under a hex name. Only a recorded name for
+/// one of THOSE chunks goes in. A chunk that was named is already expressed by its path,
+/// and a dictionary name is never written here: the standard forbids shipping the
+/// community hash lists inside a package, and `extract_and_unpack` has already spent
+/// the dictionary on every chunk it could name. This is the rule Celestial's export
+/// applies, so the two write the same table for the same mod.
+///
+/// In practice the table is small or empty: a name that hashed to its chunk was applied
+/// as the chunk's path by `apply_known_paths`, so what is left is a record whose name
+/// did NOT hash back (a stale line, a hand edit). Carrying it beats dropping it, since
+/// the name is unrecoverable once gone.
+///
+/// # Errors
+///
+/// A truncated-key collision within the table. Deliberately a hard failure, as in the
+/// standard: two different paths on one key means one of them resolves to the other's
+/// name, and a package that quietly renames a mod's asset is worse than none.
+fn game_table_for_unnamed(
+    recorded: &std::collections::HashMap<u64, String>,
+    unnamed: &[u64],
+) -> Result<Option<(ltk_modpkg::ModpkgHashtable, Vec<u8>)>, String> {
+    use ltk_hashtable::{Algorithm, Category, Hashtable, HashtableSet};
+
+    // A set, in byte order: duplicates collapse, and the file diffs cleanly under
+    // version control, which the standard recommends.
+    let names: std::collections::BTreeSet<&str> = unnamed
+        .iter()
+        .filter_map(|hash| recorded.get(hash).map(String::as_str))
+        .collect();
+    if names.is_empty() {
+        return Ok(None);
+    }
+
+    let mut table = Hashtable::default();
+    for name in names {
+        // A name outside the grammar cannot be written, and refusing the whole package
+        // over one is the wrong trade: it still packs, one name short. Said out loud,
+        // because the dropped name is unrecoverable.
+        if let Err(e) = table.push(name) {
+            eprintln!("  game table: dropping {name:?}: {e}");
+        }
+    }
+    if table.names().next().is_none() {
+        return Ok(None);
+    }
+
+    let manifest = ltk_modpkg::ModpkgHashtable {
+        path: format!("{}/game.hashes.txt", ltk_modpkg::HASHTABLES_CHUNK_DIR),
+        category: Category::Game,
+        algorithm: Algorithm::Xxh64,
+        bits: 64,
+    };
+    let entry = manifest
+        .to_entry()
+        .ok_or_else(|| "game table: 64 is not a usable key width".to_string())?;
+    // Duplicates were collapsed above, so a collision the set reports is two different
+    // names on one key.
+    let set = HashtableSet::build([(entry, table.clone())]);
+    if let Some(collision) = set.collisions().first() {
+        return Err(format!(
+            "game table: two different paths collide on one key ({collision:?}); \
+             refusing to write a package whose names resolve to the wrong asset"
+        ));
+    }
+
+    let mut bytes = Vec::new();
+    table
+        .write_to(&mut bytes)
+        .map_err(|e| format!("game table: {e}"))?;
+    Ok(Some((manifest, bytes)))
 }
 
 /// Read one packed `.wad.client` into `(chunk path, bytes)` pairs.
@@ -1913,6 +2070,12 @@ fn parse_files_txt(text: &str) -> std::collections::HashMap<u64, String> {
 /// can: it is written precisely for the paths that exist in no dictionary. Applying it
 /// here means the modpkg is built with the name rather than inheriting the loss.
 ///
+/// A name is trusted only if it hashes back to the chunk it is recorded for. A stale
+/// line (the asset renamed since, a hand edit) would otherwise move the chunk to a path
+/// the game never looks up, which is a loss dressed up as a recovery. A rejected name is
+/// not thrown away: the chunk stays hex-named, and the name travels in the package's
+/// embedded `game` table instead (see `game_table_for_unnamed`).
+///
 /// Returns how many entries were recovered.
 fn apply_known_paths(
     wads: &mut [(String, Vec<(String, Vec<u8>)>)],
@@ -1922,6 +2085,7 @@ fn apply_known_paths(
         return 0;
     }
     let mut recovered = 0usize;
+    let mut rejected = 0usize;
     for (_, entries) in wads.iter_mut() {
         for (rel, _) in entries.iter_mut() {
             let file_name = rel.rsplit('/').next().unwrap_or(rel);
@@ -1932,11 +2096,25 @@ fn apply_known_paths(
             let Ok(hash) = u64::from_str_radix(stem, 16) else {
                 continue;
             };
-            if let Some(path) = known.get(&hash) {
-                *rel = path.to_ascii_lowercase();
-                recovered += 1;
+            let Some(path) = known.get(&hash) else {
+                continue;
+            };
+            // The hash is taken over the lowercase forward-slash form, which is also the
+            // form the chunk is stored under.
+            let normalised = path.replace('\\', "/").to_ascii_lowercase();
+            if quartz_lib::wad::path_hash(&normalised) != hash {
+                eprintln!(
+                    "  files.txt: {normalised:?} does not hash to {hash:016x}; keeping the hex name"
+                );
+                rejected += 1;
+                continue;
             }
+            *rel = normalised;
+            recovered += 1;
         }
+    }
+    if rejected > 0 {
+        eprintln!("  {rejected} recorded name(s) did not match their chunk and were not applied");
     }
     recovered
 }
@@ -1986,7 +2164,7 @@ fn wad_to_modpkg(wad_path: &Path) -> Result<String, String> {
         println!("  recovered {recovered} path(s) from files.txt");
     }
 
-    let count = write_modpkg_from_wads(wads, &ask, champion, &out_path)?;
+    let count = write_modpkg_from_wads(wads, &known, &ask, champion, &out_path)?;
     Ok(format!("{wad_name} -> {} ({count} chunks)", name(&out_path)))
 }
 
@@ -2138,7 +2316,7 @@ fn fantome_to_modpkg(archive_path: &Path) -> Result<String, String> {
     let parent = archive_path.parent().unwrap_or_else(|| Path::new("."));
     let out_path = unique_file(parent, &sanitize_file_name(&ask.display_name), "modpkg");
 
-    let result = write_modpkg_from_wads(wads, &ask, champion, &out_path);
+    let result = write_modpkg_from_wads(wads, &known, &ask, champion, &out_path);
     cleanup();
     let count = result?;
 

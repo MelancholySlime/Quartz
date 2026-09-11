@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eyedropper</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        cursor: crosshair;
+        user-select: none;
+      }
+      /* The whole window is a transparent capture surface; the loupe is drawn
+         into the canvas which we move to follow the cursor. */
+      #loupe {
+        position: fixed;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5));
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="loupe" width="180" height="212"></canvas>
+    <script>
+      const invoke = window.__TAURI__.core.invoke;
+      const listen = window.__TAURI__.event.listen;
+
+      const canvas = document.getElementById('loupe');
+      const ctx = canvas.getContext('2d');
+
+      // Layout: a GRID x GRID zoom of the captured region, each source pixel drawn
+      // as CELL x CELL, then a swatch + hex strip below.
+      const GRID = 15;                 // must match ZOOM in the backend
+      const CELL = 12;
+      const PAD = 3;
+      const ZOOM_W = GRID * CELL;      // 180
+      const STRIP_H = 32;
+      canvas.width = ZOOM_W;
+      canvas.height = ZOOM_W + STRIP_H;
+
+      let last = { x: 0, y: 0, hex: '#000000', pixels: null };
+
+      function draw(frame) {
+        last = frame;
+        const { pixels, hex } = frame;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Zoom grid.
+        if (pixels && pixels.length >= GRID * GRID * 3) {
+          for (let r = 0; r < GRID; r++) {
+            for (let c = 0; c < GRID; c++) {
+              const i = (r * GRID + c) * 3;
+              ctx.fillStyle = `rgb(${pixels[i]},${pixels[i + 1]},${pixels[i + 2]})`;
+              ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+            }
+          }
+        } else {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(0, 0, ZOOM_W, ZOOM_W);
+        }
+
+        // Grid lines for that "individual pixels" look.
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = 1;
+        for (let g = 0; g <= GRID; g++) {
+          ctx.beginPath(); ctx.moveTo(g * CELL + 0.5, 0); ctx.lineTo(g * CELL + 0.5, ZOOM_W); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, g * CELL + 0.5); ctx.lineTo(ZOOM_W, g * CELL + 0.5); ctx.stroke();
+        }
+
+        // Centre-pixel crosshair box (the pixel that will be sampled).
+        const mid = Math.floor(GRID / 2);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mid * CELL + 1, mid * CELL + 1, CELL - 2, CELL - 2);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mid * CELL + 0.5, mid * CELL + 0.5, CELL - 1, CELL - 1);
+
+        // Outer border.
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0.5, 0.5, ZOOM_W - 1, ZOOM_W - 1);
+
+        // Swatch + hex strip.
+        ctx.fillStyle = 'rgba(20,20,24,0.92)';
+        ctx.fillRect(0, ZOOM_W, ZOOM_W, STRIP_H);
+        ctx.fillStyle = hex;
+        ctx.fillRect(PAD, ZOOM_W + PAD, STRIP_H - PAD * 2, STRIP_H - PAD * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.strokeRect(PAD + 0.5, ZOOM_W + PAD + 0.5, STRIP_H - PAD * 2 - 1, STRIP_H - PAD * 2 - 1);
+        ctx.fillStyle = '#f2f4f7';
+        ctx.font = '13px "Consolas", "SF Mono", monospace';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(hex.toUpperCase(), STRIP_H + 2, ZOOM_W + STRIP_H / 2);
+
+        // Position the loupe near the cursor without covering it or leaving the
+        // screen. Client coords: the overlay covers the monitor, so window-local
+        // pointer position tracks the cursor.
+        positionLoupe();
+      }
+
+      let cursor = { cx: 0, cy: 0 };
+      function positionLoupe() {
+        const off = 22;
+        let x = cursor.cx + off;
+        let y = cursor.cy + off;
+        if (x + canvas.width > window.innerWidth) x = cursor.cx - off - canvas.width;
+        if (y + canvas.height > window.innerHeight) y = cursor.cy - off - canvas.height;
+        canvas.style.transform = `translate(${Math.max(0, x)}px, ${Math.max(0, y)}px)`;
+      }
+
+      window.addEventListener('mousemove', (e) => {
+        cursor.cx = e.clientX;
+        cursor.cy = e.clientY;
+        positionLoupe();
+      });
+
+      // Capture the confirming click here so it NEVER falls through to the app
+      // under the overlay — the click only samples the colour.
+      window.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // screenX/screenY are the true screen-pixel coords the backend re-samples.
+        invoke('screen_pick_confirm', { x: Math.round(e.screenX), y: Math.round(e.screenY) });
+      }, true);
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') invoke('screen_pick_cancel');
+      });
+
+      // Also cancel if the overlay somehow loses focus without a pick.
+      window.addEventListener('blur', () => { /* keep open; backend has a 30s timeout */ });
+
+      listen('loupe://frame', (event) => draw(event.payload));
+    </script>
+  </body>
+</html>

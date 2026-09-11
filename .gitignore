@@ -46,3 +46,15 @@ Flint-ref/
 # Agent tooling scratch (progress ledgers, etc.)
 .superpowers/
 .codex-analysis/
+.codex-staging/
+.codex-target/
+
+# Scratch from cross-project work: staged sources, separate build dirs, analysis output.
+/stage_*
+/target-*/
+/league_clean/
+/compare/
+/*_plan.json
+/*_compare*.json
+/*_graph.json
+/*_calibration.json

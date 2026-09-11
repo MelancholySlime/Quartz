@@ -647,6 +647,17 @@ pub fn repath_many(
         for (hex, path) in crate::bin::bin_trailer::read_trailer(&data) {
             trailer.entry(hex).or_insert(path);
         }
+        // The re-hashed `file =` paths exist nowhere but this map. Teach the shared
+        // mapper before the consolidate step below asks what each hash names: with
+        // them unresolvable, every mesh texture referenced by hash was invisible to
+        // the protected set and got moved into the particles folder whenever an
+        // effect also used it. (The 8-hex entries are fnv1a bin refs, not files.)
+        crate::bin::ritoshark_bridge::register_file_paths(
+            trailer
+                .iter()
+                .filter(|(hex, _)| hex.len() == 16)
+                .map(|(_, path)| path.as_str()),
+        );
         // Written clean: Quartz no longer appends the hash->path trailer. The record
         // lives in `files.txt` beside the archive instead of in bytes past the bin's
         // declared end, which every other tool had to strip.

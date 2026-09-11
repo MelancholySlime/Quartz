@@ -177,7 +177,16 @@ pub fn recolor_emitters(
             .iter()
             .filter_map(|k| s.index.emitter_colors.get(k))
             .flat_map(|slots| slots.values())
-            .flat_map(|t| t.constant.iter().chain(t.keyframes.iter()))
+            .flat_map(|t| {
+                // constant + values keyframes + every probability-table channel
+                // node. Channel-table colors have empty constant/keyframes, so
+                // without the channel paths their bins are never captured for undo
+                // or marked dirty even though the recolor writes them.
+                t.constant
+                    .iter()
+                    .chain(t.keyframes.iter())
+                    .chain(t.channel_tables.iter().flatten().flatten())
+            })
             .map(|p| (p.bin, p.entry))
             .collect();
         let bins_touched: Vec<usize> = touched.iter().map(|(b, _)| *b).collect();
@@ -214,62 +223,43 @@ pub fn set_material_param(
     })
 }
 
-/// Set an emitter's blend mode (the `blendMode: u8` node).
+/// Set an emitter's blend mode, authoring the field when it used the default.
 pub fn set_blend_mode(id: SessionId, emitter_key: &str, mode: u8) -> Result<bool> {
-    with_session(id, |s| {
-        let Some(path) = s.index.blend_modes.get(emitter_key).cloned() else {
-            return false;
-        };
-        let frame = s.capture([(path.bin, path.entry)]);
-        let changed = match path.resolve_mut(&mut s.bins) {
-            Some(ritoshark::bin::BinValue::U8(v)) => {
-                if *v != mode {
-                    *v = mode;
-                    true
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        };
-        if changed {
-            s.dirty_bins([path.bin]);
-            s.push_undo(frame);
-        }
-        changed
-    })
+    set_blend_mode_bulk(id, &[emitter_key.to_owned()], mode).map(|count| count > 0)
 }
 
-/// Set the blend mode on many emitters at once, returning how many changed.
-///
-/// One undo frame covers the whole batch, so a bulk change is reversed by a single
-/// undo rather than one per emitter. Emitters that are already on `mode`, or whose
-/// blendMode node cannot be found, are skipped.
+/// The whole batch is one undo step, including newly authored blendMode fields.
 pub fn set_blend_mode_bulk(id: SessionId, emitter_keys: &[String], mode: u8) -> Result<usize> {
     with_session(id, |s| {
-        let paths: Vec<_> = emitter_keys
+        let mut seen = std::collections::HashSet::new();
+        let nodes: Vec<_> = emitter_keys
             .iter()
-            .filter_map(|key| s.index.blend_modes.get(key).cloned())
+            .filter(|key| seen.insert(key.as_str()))
+            .filter_map(|key| s.index.emitter_nodes.get(key).cloned())
             .collect();
-        if paths.is_empty() {
-            return 0;
-        }
-
-        let frame = s.capture(paths.iter().map(|p| (p.bin, p.entry)));
-        let mut changed = 0usize;
-        let mut touched_bins = Vec::new();
-        for path in &paths {
-            if let Some(ritoshark::bin::BinValue::U8(v)) = path.resolve_mut(&mut s.bins) {
-                if *v != mode {
-                    *v = mode;
-                    changed += 1;
-                    touched_bins.push(path.bin);
-                }
+        let frame = s.capture(nodes.iter().map(|p| (p.bin, p.entry)));
+        let mut changed = 0;
+        let mut bins = Vec::new();
+        for node in nodes {
+            let Some(fields) = emitter_fields(&mut s.bins, &node) else {
+                continue;
+            };
+            let hash = super::fnv1a_lower("blendMode");
+            let current = match fields.get(&hash) {
+                Some(BinValue::U8(value)) => *value,
+                None => 0,
+                _ => continue,
+            };
+            if current != mode {
+                fields.insert(hash, BinValue::U8(mode));
+                changed += 1;
+                bins.push(node.bin);
             }
         }
         if changed > 0 {
-            s.dirty_bins(touched_bins);
+            s.dirty_bins(bins);
             s.push_undo(frame);
+            s.reproject();
         }
         changed
     })
@@ -347,12 +337,7 @@ pub fn set_color_alpha(
             return None;
         };
         // All nodes live in the same emitter entry; capture one frame.
-        let entry = target
-            .constant
-            .as_ref()
-            .or_else(|| target.keyframes.first())
-            .map(|p| (p.bin, p.entry));
-        let Some(entry) = entry else { return None };
+        let entry = (target.color_path.bin, target.color_path.entry);
         let frame = s.capture([entry]);
 
         // Node order mirrors color_data_from_target: constant first, then list.
@@ -364,11 +349,29 @@ pub fn set_color_alpha(
 
         let mut changed = false;
         for (node, &a) in nodes.iter().zip(alphas.iter()) {
+            if !a.is_finite() {
+                continue;
+            }
             let a = a.clamp(0.0, 1.0);
             if let Some(ritoshark::bin::BinValue::Vec4(v)) = node.resolve_mut(&mut s.bins) {
                 if (v[3] - a).abs() > f32::EPSILON {
                     v[3] = a;
                     changed = true;
+                }
+            }
+        }
+        let offset = nodes.len();
+        for (channels, &a) in target.channel_tables.iter().zip(alphas.iter().skip(offset)) {
+            if !a.is_finite() {
+                continue;
+            }
+            if let Some(path) = &channels[3] {
+                if let Some(BinValue::F32(value)) = path.resolve_mut(&mut s.bins) {
+                    let next = a.clamp(0.0, 1.0);
+                    if *value != next {
+                        *value = next;
+                        changed = true;
+                    }
                 }
             }
         }
@@ -379,6 +382,497 @@ pub fn set_color_alpha(
         s.push_undo(frame);
         Some(s.reproject())
     })
+}
+
+// ── Structural color edits: create / keyframes / (de)animate ─────────────────
+//
+// Unlike recolor/alpha (in-place vec4 mutation), these change tree SHAPE, so
+// each reprojects afterward (the EditIndex slot paths shift). They resolve the
+// emitter's own node (`EditIndex.emitter_nodes`) and mutate its field map or a
+// nested color's `values`/`times` lists directly, using ritoshark BinValue
+// construction (mirrors the `color_field` test template).
+
+use ritoshark::bin::{BinType, BinValue};
+
+fn slot_field_hashes(slot: model::ColorSlot) -> &'static [&'static str] {
+    match slot {
+        model::ColorSlot::Color => &["color"],
+        model::ColorSlot::BirthColor => &["birthColor"],
+        model::ColorSlot::FresnelColor => &["fresnelColor", "outlineColor"],
+        model::ColorSlot::LingerColor => &["lingerColor", "SeparateLingerColor"],
+    }
+}
+
+fn parse_slot(slot: &str) -> Option<model::ColorSlot> {
+    Some(match slot {
+        "color" => model::ColorSlot::Color,
+        "birthColor" => model::ColorSlot::BirthColor,
+        "fresnelColor" => model::ColorSlot::FresnelColor,
+        "lingerColor" => model::ColorSlot::LingerColor,
+        _ => return None,
+    })
+}
+
+/// A vec4 `values` list from a slice of RGBA.
+fn build_vec4_list(items: &[[f32; 4]]) -> BinValue {
+    BinValue::List {
+        is_list2: false,
+        item: BinType::Vec4,
+        items: items.iter().map(|v| BinValue::Vec4(*v)).collect(),
+    }
+}
+
+/// An f32 `times` list.
+fn build_f32_list(times: &[f32]) -> BinValue {
+    BinValue::List {
+        is_list2: false,
+        item: BinType::F32,
+        items: times.iter().map(|t| BinValue::F32(*t)).collect(),
+    }
+}
+
+/// A fresh `ValueColor { constantValue }` embed.
+fn build_value_color_constant(rgba: [f32; 4]) -> BinValue {
+    let mut f = indexmap::IndexMap::new();
+    f.insert(super::fnv1a_lower("constantValue"), BinValue::Vec4(rgba));
+    BinValue::Embed {
+        class: super::fnv1a_lower("ValueColor"),
+        fields: f,
+    }
+}
+
+/// Resolve the emitter's field map (`&mut IndexMap`) for `emitter_key`, given a
+/// clone of its node path. Returns None if the emitter node isn't an embed/ptr.
+fn emitter_fields<'a>(
+    bins: &'a mut [LoadedBin],
+    node: &model::NodePath,
+) -> Option<&'a mut indexmap::IndexMap<u32, BinValue>> {
+    match node.resolve_mut(bins) {
+        Some(BinValue::Embed { fields, .. }) | Some(BinValue::Pointer { fields, .. }) => {
+            Some(fields)
+        }
+        _ => None,
+    }
+}
+
+/// The field-map holding a color slot's `values`/`times` lists: the ValueColor
+/// embed's `dynamics` pointer fields when animated, else the embed's own fields.
+/// Returns None when the color isn't an animatable embed with lists.
+fn color_curve_fields<'a>(
+    color: &'a mut BinValue,
+) -> Option<&'a mut indexmap::IndexMap<u32, BinValue>> {
+    let h_dynamics = super::fnv1a_lower("dynamics");
+    let fields = match color {
+        BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => fields,
+        _ => return None,
+    };
+    // `has_dyn` is an owned bool, so the immutable borrow from `.get` ends before
+    // the mutable branch below (avoids a get/get_mut borrow conflict).
+    let has_dyn = matches!(
+        fields.get(&h_dynamics),
+        Some(BinValue::Pointer { .. } | BinValue::Embed { .. })
+    );
+    if has_dyn {
+        match fields.get_mut(&h_dynamics) {
+            Some(BinValue::Pointer { fields: df, .. } | BinValue::Embed { fields: df, .. }) => {
+                Some(df)
+            }
+            _ => None,
+        }
+    } else {
+        Some(fields)
+    }
+}
+
+/// Look up the emitter's color field (by slot) as a mutable `BinValue`, plus a
+/// touch (bin, entry) for undo. Resolves through the emitter node.
+fn resolve_color_field<'a>(
+    s: &'a mut BinSession,
+    emitter_key: &str,
+    slot: model::ColorSlot,
+) -> Option<(&'a mut BinValue, (usize, usize))> {
+    let node = s
+        .index
+        .emitter_colors
+        .get(emitter_key)?
+        .get(&slot)?
+        .color_path
+        .clone();
+    let touch = (node.bin, node.entry);
+    node.resolve_mut(&mut s.bins).map(|f| (f, touch))
+}
+
+/// Create a missing color using the slot's real schema. Fresnel is a nested
+/// vec4; lifetime/birth/linger colors are ValueColor wrappers.
+pub fn create_color(id: SessionId, emitter_key: &str, slot: &str) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    with_session(id, |s| {
+        if color_target(s, emitter_key, slot).is_some() {
+            return None;
+        }
+        let node = s.index.emitter_nodes.get(emitter_key)?.clone();
+        let mut next = node.resolve_mut(&mut s.bins)?.clone();
+        let fields = color_fields(&mut next)?;
+        let existing = slot_field_hashes(slot)
+            .iter()
+            .map(|name| super::fnv1a_lower(name))
+            .find(|hash| fields.contains_key(hash));
+        if let Some(hash) = existing {
+            // An empty ValueColor is also missing from the model. Restore its
+            // required constant without dropping other authored wrapper fields.
+            match fields.get_mut(&hash)? {
+                BinValue::Embed { class, fields } | BinValue::Pointer { class, fields }
+                    if *class == super::fnv1a_lower("ValueColor") =>
+                {
+                    fields.insert(
+                        super::fnv1a_lower("constantValue"),
+                        BinValue::Vec4([1.0; 4]),
+                    );
+                }
+                _ => return None,
+            }
+        } else if slot == model::ColorSlot::FresnelColor {
+            let reflection = fields
+                .entry(super::fnv1a_lower("reflectionDefinition"))
+                .or_insert_with(|| BinValue::Pointer {
+                    class: super::fnv1a_lower("VfxReflectionDefinitionData"),
+                    fields: indexmap::IndexMap::new(),
+                });
+            if let BinValue::Pointer { class, .. } = reflection {
+                // A null pointer cannot serialize child fields until its class
+                // is authored; otherwise Create appears to work until reopen.
+                if *class == 0 {
+                    *class = super::fnv1a_lower("VfxReflectionDefinitionData");
+                }
+            }
+            color_fields(reflection)?
+                .insert(super::fnv1a_lower("fresnelColor"), BinValue::Vec4([1.0; 4]));
+        } else {
+            let name = if slot == model::ColorSlot::LingerColor {
+                "SeparateLingerColor"
+            } else {
+                slot_field_hashes(slot)[0]
+            };
+            fields.insert(
+                super::fnv1a_lower(name),
+                build_value_color_constant([1.0; 4]),
+            );
+        }
+        if slot == model::ColorSlot::LingerColor {
+            fields.insert(
+                super::fnv1a_lower("UseSeparateLingerColor"),
+                BinValue::Flag(true),
+            );
+        }
+        let touch = (node.bin, node.entry);
+        let frame = s.capture([touch]);
+        *node.resolve_mut(&mut s.bins)? = next;
+        s.dirty_bins([touch.0]);
+        s.push_undo(frame);
+        Some(s.reproject())
+    })
+}
+
+/// Resolve a projected color target. Its indices are the public model indices:
+/// constant first (when authored), followed by curve stops or channel ranges.
+fn color_target(
+    s: &BinSession,
+    emitter_key: &str,
+    slot: model::ColorSlot,
+) -> Option<model::ColorTarget> {
+    s.index.emitter_colors.get(emitter_key)?.get(&slot).cloned()
+}
+
+fn structural_color(target: &model::ColorTarget) -> bool {
+    target.is_value_color && target.channel_tables.is_empty()
+}
+
+/// Apply a color replacement atomically after validating/building it off-tree.
+/// One command contributes exactly one undo frame, including auto-animation.
+fn replace_color(
+    s: &mut BinSession,
+    target: &model::ColorTarget,
+    next: BinValue,
+) -> Option<VfxModel> {
+    let touch = (target.color_path.bin, target.color_path.entry);
+    let frame = s.capture([touch]);
+    *target.color_path.resolve_mut(&mut s.bins)? = next;
+    s.dirty_bins([touch.0]);
+    s.push_undo(frame);
+    Some(s.reproject())
+}
+
+fn color_fields(color: &mut BinValue) -> Option<&mut indexmap::IndexMap<u32, BinValue>> {
+    match color {
+        BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => Some(fields),
+        _ => None,
+    }
+}
+
+/// Build dynamics in the existing ValueColor, retaining unknown fields and the
+/// wrapper constant. Bare vec4 fields (especially Fresnel) are not animatable.
+fn insert_curve(color: &mut BinValue, seed: [f32; 4], times: &[f32]) -> Option<()> {
+    let fields = color_fields(color)?;
+    let dynamics = fields
+        .entry(super::fnv1a_lower("dynamics"))
+        .or_insert_with(|| BinValue::Pointer {
+            class: super::fnv1a_lower("VfxAnimatedColorVariableData"),
+            fields: indexmap::IndexMap::new(),
+        });
+    if let BinValue::Pointer { class, .. } = dynamics {
+        if *class == 0 {
+            *class = super::fnv1a_lower("VfxAnimatedColorVariableData");
+        }
+    }
+    let inner = color_fields(dynamics)?;
+    inner.insert(super::fnv1a_lower("times"), build_f32_list(times));
+    inner.insert(
+        super::fnv1a_lower("values"),
+        build_vec4_list(&vec![seed; times.len()]),
+    );
+    Some(())
+}
+
+/// Use exactly the same authored/fallback times the model displayed. Repair a
+/// missing/short list before editing so existing stops do not jump in time.
+fn aligned_curve_times(curve: &mut indexmap::IndexMap<u32, BinValue>, target: &model::ColorTarget) {
+    curve.insert(super::fnv1a_lower("times"), build_f32_list(&target.times));
+}
+
+fn finite_keyframe(rgba: [f32; 4], time: f32) -> Result<([f32; 4], f32)> {
+    if !time.is_finite() || rgba.iter().any(|v| !v.is_finite()) {
+        return Err(Error::InvalidInput(
+            "Color components and time must be finite".into(),
+        ));
+    }
+    Ok((rgba.map(|v| v.clamp(0.0, 1.0)), time.clamp(0.0, 1.0)))
+}
+
+/// Promote a constant ValueColor to a two-stop lifetime curve.
+pub fn animate_color(id: SessionId, emitter_key: &str, slot: &str) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    with_session(id, |s| {
+        let target = color_target(s, emitter_key, slot)?;
+        if !structural_color(&target) || !target.keyframes.is_empty() {
+            return None;
+        }
+        let mut next = target.color_path.resolve_mut(&mut s.bins)?.clone();
+        let seed = constant_value(&next)?;
+        insert_curve(&mut next, seed, &[0.0, 1.0])?;
+        replace_color(s, &target, next)
+    })
+}
+
+/// Collapse a lifetime curve to its first value, retaining other wrapper fields.
+/// Probability tables represent random ranges and are never discarded here.
+pub fn deanimate_color(id: SessionId, emitter_key: &str, slot: &str) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    with_session(id, |s| {
+        let target = color_target(s, emitter_key, slot)?;
+        if !structural_color(&target) {
+            return None;
+        }
+        let first = match target.keyframes.first()?.resolve_mut(&mut s.bins)? {
+            BinValue::Vec4(value) => *value,
+            _ => return None,
+        };
+        let mut next = target.color_path.resolve_mut(&mut s.bins)?.clone();
+        let fields = color_fields(&mut next)?;
+        for name in ["dynamics", "values", "times"] {
+            fields.shift_remove(&super::fnv1a_lower(name));
+        }
+        fields.insert(super::fnv1a_lower("constantValue"), BinValue::Vec4(first));
+        replace_color(s, &target, next)
+    })
+}
+
+/// Append a stop; promoting a constant and appending is one atomic edit.
+pub fn add_keyframe(
+    id: SessionId,
+    emitter_key: &str,
+    slot: &str,
+    rgba: [f32; 4],
+    time: f32,
+) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    let (rgba, time) = finite_keyframe(rgba, time)?;
+    with_session(id, |s| {
+        let target = color_target(s, emitter_key, slot)?;
+        if !structural_color(&target) {
+            return None;
+        }
+        let mut next = target.color_path.resolve_mut(&mut s.bins)?.clone();
+        if target.keyframes.is_empty() {
+            let seed = constant_value(&next)?;
+            insert_curve(&mut next, seed, &[0.0])?;
+        } else {
+            aligned_curve_times(color_curve_fields(&mut next)?, &target);
+        }
+        let curve = color_curve_fields(&mut next)?;
+        match curve.get_mut(&super::fnv1a_lower("values"))? {
+            BinValue::List {
+                item: BinType::Vec4,
+                items,
+                ..
+            } => items.push(BinValue::Vec4(rgba)),
+            _ => return None,
+        }
+        match curve.get_mut(&super::fnv1a_lower("times"))? {
+            BinValue::List { items, .. } => items.push(BinValue::F32(time)),
+            _ => return None,
+        }
+        replace_color(s, &target, next)
+    })
+}
+
+/// Map the public model index to its underlying curve-list index. The wrapper
+/// constant is independently editable but is never a removable/retimable stop.
+fn curve_index(target: &model::ColorTarget, index: usize) -> Option<usize> {
+    let offset = usize::from(target.constant.is_some());
+    let path = target.keyframes.get(index.checked_sub(offset)?)?;
+    match path.steps.last()? {
+        model::Step::Index(index) => Some(*index),
+        _ => None,
+    }
+}
+
+/// Delete a stop using the projected model index; retain at least one stop.
+pub fn delete_keyframe(
+    id: SessionId,
+    emitter_key: &str,
+    slot: &str,
+    index: usize,
+) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    with_session(id, |s| {
+        let target = color_target(s, emitter_key, slot)?;
+        if !structural_color(&target) || target.keyframes.len() <= 1 {
+            return None;
+        }
+        let index = curve_index(&target, index)?;
+        let mut next = target.color_path.resolve_mut(&mut s.bins)?.clone();
+        let curve = color_curve_fields(&mut next)?;
+        aligned_curve_times(curve, &target);
+        match curve.get_mut(&super::fnv1a_lower("values"))? {
+            BinValue::List { items, .. } if index < items.len() => {
+                items.remove(index);
+            }
+            _ => return None,
+        }
+        match curve.get_mut(&super::fnv1a_lower("times"))? {
+            BinValue::List { items, .. } if index < items.len() => {
+                items.remove(index);
+            }
+            _ => return None,
+        }
+        replace_color(s, &target, next)
+    })
+}
+
+/// Update the public model index in place. Probability-table keys scatter RGBA
+/// to authored channels only; their random-distribution times stay unchanged.
+pub fn set_keyframe(
+    id: SessionId,
+    emitter_key: &str,
+    slot: &str,
+    index: usize,
+    rgba: [f32; 4],
+    time: f32,
+) -> Result<Option<VfxModel>> {
+    let Some(slot) = parse_slot(slot) else {
+        return Ok(None);
+    };
+    let (rgba, time) = finite_keyframe(rgba, time)?;
+    with_session(id, |s| {
+        let target = color_target(s, emitter_key, slot)?;
+        let offset = usize::from(target.constant.is_some());
+        let constant = index == 0 && target.constant.is_some();
+        let list_index = if constant {
+            None
+        } else {
+            Some(index.checked_sub(offset)?)
+        };
+        let vec_path = if constant {
+            target.constant.as_ref()
+        } else {
+            target.keyframes.get(list_index?)
+        };
+        let channels = list_index
+            .and_then(|i| i.checked_sub(target.keyframes.len()))
+            .and_then(|i| target.channel_tables.get(i));
+        if vec_path.is_none() && channels.is_none() {
+            return None;
+        }
+        let touch = (target.color_path.bin, target.color_path.entry);
+        let frame = s.capture([touch]);
+        let mut changed = false;
+        if let Some(path) = vec_path {
+            if let Some(BinValue::Vec4(value)) = path.resolve_mut(&mut s.bins) {
+                if *value != rgba {
+                    *value = rgba;
+                    changed = true;
+                }
+            }
+        }
+        if let Some(channels) = channels {
+            for (channel, path) in channels.iter().enumerate() {
+                if let Some(path) = path {
+                    if let Some(BinValue::F32(value)) = path.resolve_mut(&mut s.bins) {
+                        if *value != rgba[channel] {
+                            *value = rgba[channel];
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        if !constant && vec_path.is_some() {
+            let projected_index = list_index?;
+            let raw_index = curve_index(&target, index)?;
+            if target.times.get(projected_index).copied() != Some(time) {
+                let (color, _) = resolve_color_field(s, emitter_key, slot)?;
+                let curve = color_curve_fields(color)?;
+                aligned_curve_times(curve, &target);
+                if let Some(BinValue::List { items, .. }) =
+                    curve.get_mut(&super::fnv1a_lower("times"))
+                {
+                    if let Some(value) = items.get_mut(raw_index) {
+                        *value = BinValue::F32(time);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return None;
+        }
+        s.dirty_bins([touch.0]);
+        s.push_undo(frame);
+        Some(s.reproject())
+    })
+}
+
+fn constant_value(color: &BinValue) -> Option<[f32; 4]> {
+    match color {
+        BinValue::Vec4(v) => Some(*v),
+        BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => {
+            match fields.get(&super::fnv1a_lower("constantValue")) {
+                Some(BinValue::Vec4(v)) => Some(*v),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Undo the last mutating edit. Returns the refreshed model, or `None` if the
@@ -705,9 +1199,7 @@ mod edit_tests {
             );
 
             // Drive every keyframe to a distinct value so a mis-zip is visible.
-            let wanted: Vec<f32> = (0..before.len())
-                .map(|i| 0.1 + 0.15 * i as f32)
-                .collect();
+            let wanted: Vec<f32> = (0..before.len()).map(|i| 0.1 + 0.15 * i as f32).collect();
             let out = set_color_alpha(id, &key, "color", &wanted).unwrap();
             assert!(out.is_some(), "{name}: alpha edit reported no change");
 
@@ -815,7 +1307,10 @@ mod edit_tests {
 
         let before = session_bytes(id);
         let out = set_color_alpha(id, &key, "color", &[0.5]).unwrap();
-        assert!(out.is_none(), "re-applying the same alpha reported a change");
+        assert!(
+            out.is_none(),
+            "re-applying the same alpha reported a change"
+        );
         assert_eq!(before, session_bytes(id), "no-op still mutated the bytes");
         assert!(undo(id).unwrap().is_none(), "no-op pushed an undo frame");
         close(id);
@@ -841,7 +1336,10 @@ mod edit_tests {
         set_color_alpha(id, &key, "color", &[0.2]).unwrap();
         let a = alphas_of(id, &key);
         assert!((a[0] - 0.2).abs() < 1e-6, "got {a:?}");
-        assert!((a[1] - 1.0).abs() < 1e-6, "trailing keyframe changed: {a:?}");
+        assert!(
+            (a[1] - 1.0).abs() < 1e-6,
+            "trailing keyframe changed: {a:?}"
+        );
 
         // Long input: extras are dropped, no panic.
         set_color_alpha(id, &key, "color", &[0.9, 0.9, 0.9, 0.9, 0.9]).unwrap();
@@ -899,7 +1397,11 @@ mod edit_tests {
         undo(id).unwrap().unwrap();
         assert_eq!(session_bytes(id), s1, "undo #1 did not restore state 1");
         undo(id).unwrap().unwrap();
-        assert_eq!(session_bytes(id), s0, "undo #2 did not restore the original");
+        assert_eq!(
+            session_bytes(id),
+            s0,
+            "undo #2 did not restore the original"
+        );
         redo(id).unwrap().unwrap();
         assert_eq!(session_bytes(id), s1, "redo #1 mismatch");
         redo(id).unwrap().unwrap();
@@ -1099,10 +1601,7 @@ mod edit_tests {
         );
         let id = open(&path).unwrap().session_id;
         let written = save(id, None, true).unwrap();
-        assert!(
-            written.is_empty(),
-            "clean session wrote files: {written:?}"
-        );
+        assert!(written.is_empty(), "clean session wrote files: {written:?}");
         close(id);
         let _ = std::fs::remove_file(&path);
     }
@@ -1131,6 +1630,558 @@ mod edit_tests {
             "undo + save did not restore the original file bytes"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    fn projected_color(id: SessionId) -> model::ColorData {
+        model_of(id).unwrap().emitters[0]
+            .colors
+            .color
+            .clone()
+            .unwrap()
+    }
+
+    fn test_emitter_fields(bin: &mut Bin) -> &mut IndexMap<u32, BinValue> {
+        let BinValue::List { items, .. } = bin.entries[0]
+            .fields
+            .get_mut(&fh("complexEmitterDefinitionData"))
+            .unwrap()
+        else {
+            panic!("emitter list")
+        };
+        color_fields(&mut items[0]).unwrap()
+    }
+
+    #[test]
+    fn keyframe_indices_include_wrapper_constant_and_roundtrip() {
+        let wrapper = [0.2, 0.3, 0.4, 0.5];
+        let first = [1.0, 0.0, 0.0, 1.0];
+        let last = [0.0, 0.0, 1.0, 0.5];
+        let path = write_temp(
+            &bin_with_color(ColorShape::ConstantPlusDynamics(wrapper, vec![first, last])),
+            "keyframe_indices",
+        );
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        let original = session_bytes(id);
+        let metadata = projected_color(id);
+        assert_eq!(metadata.storage, model::ColorStorage::Curve);
+        assert_eq!(metadata.constant_index, Some(0));
+        assert!(metadata.supports_retime && metadata.supports_structural_edits);
+
+        let new_wrapper = [0.8, 0.9, 0.7, 0.6];
+        set_keyframe(id, &key, "color", 0, new_wrapper, 0.8)
+            .unwrap()
+            .unwrap();
+        let view = projected_color(id);
+        assert_eq!(view.keyframes[0].rgba, new_wrapper);
+        assert_eq!(view.keyframes[0].time, 0.0);
+        assert_eq!(view.keyframes[1].rgba, first);
+        let replacement = [0.3, 0.5, 0.7, 0.9];
+        set_keyframe(id, &key, "color", 2, replacement, 0.25)
+            .unwrap()
+            .unwrap();
+        let view = projected_color(id);
+        assert_eq!(view.keyframes[1].rgba, first);
+        assert_eq!(view.keyframes[2].rgba, replacement);
+        assert_eq!(view.keyframes[2].time, 0.25);
+        let before_delete = session_bytes(id);
+        assert!(delete_keyframe(id, &key, "color", 0).unwrap().is_none());
+        assert!(delete_keyframe(id, &key, "color", 99).unwrap().is_none());
+        assert!(set_keyframe(id, &key, "color", 99, [0.0; 4], 0.0)
+            .unwrap()
+            .is_none());
+        assert!(set_keyframe(id, &key, "color", 2, replacement, 0.25)
+            .unwrap()
+            .is_none());
+        assert_eq!(session_bytes(id), before_delete);
+        delete_keyframe(id, &key, "color", 1).unwrap().unwrap();
+        let view = projected_color(id);
+        assert_eq!(view.keyframes.len(), 2);
+        assert_eq!(view.keyframes[1].rgba, replacement);
+        assert_eq!(view.keyframes[1].time, 0.25);
+        assert!(delete_keyframe(id, &key, "color", 1).unwrap().is_none());
+        let edited = session_bytes(id);
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), before_delete);
+        undo(id).unwrap().unwrap();
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        assert!(
+            undo(id).unwrap().is_none(),
+            "invalid/no-op edits must not add undo frames"
+        );
+        for _ in 0..3 {
+            redo(id).unwrap().unwrap();
+        }
+        assert_eq!(session_bytes(id), edited);
+        save(id, None, true).unwrap();
+        close(id);
+        let reopened = open(&path).unwrap().session_id;
+        assert_eq!(session_bytes(reopened), edited);
+        assert_eq!(projected_color(reopened).keyframes[1].time, 0.25);
+        close(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn auto_animation_and_add_are_one_undo_step() {
+        let path = write_temp(
+            &bin_with_color(ColorShape::Constant([0.2, 0.3, 0.4, 0.5])),
+            "add_atomic",
+        );
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        let original = session_bytes(id);
+        add_keyframe(id, &key, "color", [0.9, 0.8, 0.7, 0.6], 0.37)
+            .unwrap()
+            .unwrap();
+        let view = projected_color(id);
+        assert_eq!(view.keyframes.len(), 3);
+        assert_eq!(view.keyframes[2].time, 0.37);
+        let edited = session_bytes(id);
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        assert!(undo(id).unwrap().is_none());
+        redo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), edited);
+        assert!(add_keyframe(id, &key, "color", [f32::NAN; 4], 0.0).is_err());
+        assert!(set_keyframe(id, &key, "color", 1, [0.0; 4], f32::INFINITY).is_err());
+        assert_eq!(session_bytes(id), edited);
+        close(id);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn missing_times_keep_displayed_positions_and_use_supplied_new_time() {
+        let mut bin = bin_with_color(ColorShape::Values(vec![[1.0; 4], [0.5; 4]]));
+        let color = test_emitter_fields(&mut bin).get_mut(&fh("color")).unwrap();
+        color_curve_fields(color)
+            .unwrap()
+            .shift_remove(&fh("times"));
+        let path = write_temp(&bin, "missing_curve_times");
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        add_keyframe(id, &key, "color", [0.25; 4], 0.3)
+            .unwrap()
+            .unwrap();
+        let times: Vec<_> = projected_color(id)
+            .keyframes
+            .iter()
+            .map(|k| k.time)
+            .collect();
+        assert_eq!(times, vec![0.0, 1.0, 0.3]);
+        set_keyframe(id, &key, "color", 0, [1.0; 4], 0.8)
+            .unwrap()
+            .unwrap();
+        let times: Vec<_> = projected_color(id)
+            .keyframes
+            .iter()
+            .map(|k| k.time)
+            .collect();
+        assert_eq!(
+            times,
+            vec![0.8, 1.0, 0.3],
+            "retiming must never sort the stored list"
+        );
+        close(id);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn animate_deanimate_preserve_wrapper_metadata_and_noops() {
+        let mut bin = bin_with_color(ColorShape::Constant([0.2, 0.4, 0.6, 0.8]));
+        color_fields(test_emitter_fields(&mut bin).get_mut(&fh("color")).unwrap())
+            .unwrap()
+            .insert(fh("otherMetadata"), BinValue::U32(123));
+        let path = write_temp(&bin, "animate_wrapper");
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        let original = session_bytes(id);
+        assert!(deanimate_color(id, &key, "color").unwrap().is_none());
+        animate_color(id, &key, "color").unwrap().unwrap();
+        assert_eq!(projected_color(id).keyframes.len(), 3);
+        assert!(animate_color(id, &key, "color").unwrap().is_none());
+        with_session(id, |s| {
+            let (color, _) = resolve_color_field(s, &key, model::ColorSlot::Color).unwrap();
+            assert_eq!(
+                color_fields(color).unwrap().get(&fh("otherMetadata")),
+                Some(&BinValue::U32(123))
+            );
+        })
+        .unwrap();
+        deanimate_color(id, &key, "color").unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        undo(id).unwrap().unwrap();
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        assert!(undo(id).unwrap().is_none());
+        close(id);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn probability_table_edits_scatter_and_structural_commands_leave_bytes_intact() {
+        let mut bin = bin_with_color(ColorShape::Dynamics(vec![[1.0; 4]]));
+        let tables = (0..4)
+            .map(|channel| {
+                let mut fields = IndexMap::new();
+                let values = if channel == 1 {
+                    vec![0.3]
+                } else {
+                    vec![0.2, 0.7]
+                };
+                fields.insert(fh("keyValues"), build_f32_list(&values));
+                fields.insert(fh("keyTimes"), build_f32_list(&[0.1, 0.9]));
+                BinValue::Pointer {
+                    class: fh("VfxProbabilityTableData"),
+                    fields,
+                }
+            })
+            .collect();
+        let color = test_emitter_fields(&mut bin).get_mut(&fh("color")).unwrap();
+        color_curve_fields(color).unwrap().insert(
+            fh("probabilityTables"),
+            BinValue::List {
+                is_list2: false,
+                item: BinType::Pointer,
+                items: tables,
+            },
+        );
+        let path = write_temp(&bin, "probability_edit");
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        let original = session_bytes(id);
+        let view = projected_color(id);
+        assert_eq!(view.storage, model::ColorStorage::ProbabilityTables);
+        assert!(!view.supports_retime && !view.supports_structural_edits);
+        assert_eq!(view.constant_index, None);
+        assert!(animate_color(id, &key, "color").unwrap().is_none());
+        assert!(deanimate_color(id, &key, "color").unwrap().is_none());
+        assert!(add_keyframe(id, &key, "color", [0.5; 4], 0.5)
+            .unwrap()
+            .is_none());
+        assert!(delete_keyframe(id, &key, "color", 0).unwrap().is_none());
+        assert_eq!(session_bytes(id), original);
+        assert!(undo(id).unwrap().is_none());
+        set_keyframe(id, &key, "color", 1, [0.8, 0.6, 0.4, 0.5], 0.25)
+            .unwrap()
+            .unwrap();
+        let view = projected_color(id);
+        assert_eq!(
+            view.keyframes[1].rgba,
+            [0.8, 1.0, 0.4, 0.5],
+            "unauthored channels must stay absent"
+        );
+        assert_eq!(
+            view.keyframes[1].time, 0.9,
+            "probability times are distribution coordinates"
+        );
+        set_color_alpha(id, &key, "color", &[0.15, 0.35])
+            .unwrap()
+            .unwrap();
+        assert_eq!(alphas_of(id, &key), vec![0.15, 0.35]);
+        with_session(id, |s| {
+            let (color, _) = resolve_color_field(s, &key, model::ColorSlot::Color).unwrap();
+            let curve = color_curve_fields(color).unwrap();
+            assert_eq!(
+                curve.get(&fh("values")),
+                Some(&vec4_list(&[[1.0; 4]])),
+                "leave placeholder curve unchanged"
+            );
+        })
+        .unwrap();
+        let edited = session_bytes(id);
+        undo(id).unwrap().unwrap();
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        redo(id).unwrap().unwrap();
+        redo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), edited);
+        recolor_emitters(
+            id,
+            &[key.clone()],
+            &[ColorTargetSel::All],
+            &two_stop_palette(),
+            &recolor_opts(true),
+        )
+        .unwrap();
+        let partial = emitter_colors_of(id, &[key.clone()])
+            .unwrap()
+            .remove(&key)
+            .unwrap()
+            .color
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&partial).unwrap(),
+            serde_json::to_value(projected_color(id)).unwrap()
+        );
+        let edited = session_bytes(id);
+        save(id, None, true).unwrap();
+        close(id);
+        let reopened = open(&path).unwrap().session_id;
+        assert_eq!(session_bytes(reopened), edited);
+        close(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn create_uses_real_slot_shapes_and_missing_blend_mode_is_editable() {
+        let mut bin = bin_with_color(ColorShape::Constant([1.0; 4]));
+        test_emitter_fields(&mut bin).shift_remove(&fh("blendMode"));
+        // Empty ValueColor and null reflection pointers both project as absent.
+        test_emitter_fields(&mut bin).insert(
+            fh("birthColor"),
+            BinValue::Embed {
+                class: fh("ValueColor"),
+                fields: IndexMap::new(),
+            },
+        );
+        test_emitter_fields(&mut bin).insert(
+            fh("reflectionDefinition"),
+            BinValue::Pointer {
+                class: 0,
+                fields: IndexMap::new(),
+            },
+        );
+        let path = write_temp(&bin, "create_slots");
+        let id = open(&path).unwrap().session_id;
+        let key = only_emitter_key(id);
+        let original = session_bytes(id);
+        assert!(!set_blend_mode(id, &key, 0).unwrap());
+        assert!(set_blend_mode(id, &key, 5).unwrap());
+        assert_eq!(model_of(id).unwrap().emitters[0].blend_mode, 5);
+        undo(id).unwrap().unwrap();
+        assert_eq!(session_bytes(id), original);
+        assert_eq!(
+            set_blend_mode_bulk(id, &[key.clone(), key.clone()], 2).unwrap(),
+            1
+        );
+        assert!(!set_blend_mode(id, &key, 2).unwrap());
+        for slot in ["birthColor", "fresnelColor", "lingerColor"] {
+            create_color(id, &key, slot).unwrap().unwrap();
+            assert!(create_color(id, &key, slot).unwrap().is_none());
+        }
+        let view = model_of(id).unwrap();
+        let fresnel = view.emitters[0].colors.fresnel_color.as_ref().unwrap();
+        assert!(!fresnel.supports_structural_edits);
+        assert!(animate_color(id, &key, "fresnelColor").unwrap().is_none());
+        assert!(add_keyframe(id, &key, "fresnelColor", [0.0; 4], 0.5)
+            .unwrap()
+            .is_none());
+        set_keyframe(id, &key, "fresnelColor", 0, [0.2, 0.4, 0.6, 0.0], 0.0)
+            .unwrap()
+            .unwrap();
+        with_session(id, |s| {
+            let node = s.index.emitter_nodes.get(&key).unwrap().clone();
+            let fields = emitter_fields(&mut s.bins, &node).unwrap();
+            assert_eq!(
+                fields.get(&fh("UseSeparateLingerColor")),
+                Some(&BinValue::Flag(true))
+            );
+            assert!(fields.contains_key(&fh("SeparateLingerColor")));
+            assert!(!fields.contains_key(&fh("fresnelColor")));
+            let reflection =
+                color_fields(fields.get_mut(&fh("reflectionDefinition")).unwrap()).unwrap();
+            assert_eq!(
+                reflection.get(&fh("fresnelColor")),
+                Some(&BinValue::Vec4([0.2, 0.4, 0.6, 0.0]))
+            );
+        })
+        .unwrap();
+        let edited = session_bytes(id);
+        save(id, None, true).unwrap();
+        close(id);
+        let reopened = open(&path).unwrap().session_id;
+        assert_eq!(session_bytes(reopened), edited);
+        close(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn empty_probability_shells_keep_curve_editing_and_survive_add() {
+        for values in [vec![], vec![[0.3; 4]]] {
+            let mut bin =
+                bin_with_color(ColorShape::ConstantPlusDynamics([1.0; 4], values.clone()));
+            let color = test_emitter_fields(&mut bin).get_mut(&fh("color")).unwrap();
+            let curve = color_curve_fields(color).unwrap();
+            let shells = BinValue::List {
+                is_list2: false,
+                item: BinType::Pointer,
+                items: (0..4)
+                    .map(|_| BinValue::Pointer {
+                        class: fh("VfxProbabilityTableData"),
+                        fields: IndexMap::new(),
+                    })
+                    .collect(),
+            };
+            curve.insert(fh("probabilityTables"), shells.clone());
+            curve.insert(fh("otherMetadata"), BinValue::U32(42));
+            let path = write_temp(&bin, &format!("empty_probability_shells_{}", values.len()));
+            let id = open(&path).unwrap().session_id;
+            let key = only_emitter_key(id);
+            let view = projected_color(id);
+            assert_ne!(view.storage, model::ColorStorage::ProbabilityTables);
+            assert!(view.supports_structural_edits);
+            add_keyframe(id, &key, "color", [0.6; 4], 0.7)
+                .unwrap()
+                .unwrap();
+            with_session(id, |s| {
+                let (color, _) = resolve_color_field(s, &key, model::ColorSlot::Color).unwrap();
+                let curve = color_curve_fields(color).unwrap();
+                assert_eq!(curve.get(&fh("probabilityTables")), Some(&shells));
+                assert_eq!(curve.get(&fh("otherMetadata")), Some(&BinValue::U32(42)));
+            })
+            .unwrap();
+            close(id);
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Opt-in real-asset smoke. Always edits a temporary copy, including when
+    /// QUARTZ_TEST_BIN refers to a user's working skin.
+    #[test]
+    #[ignore = "set QUARTZ_TEST_BIN to an Irelia Skin55 BIN and run explicitly"]
+    fn real_color_editor_smoke() {
+        let source = PathBuf::from(std::env::var_os("QUARTZ_TEST_BIN").expect("QUARTZ_TEST_BIN"));
+        let original_source = std::fs::read(&source).unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let path = scratch.path().join("skin.bin");
+        std::fs::write(&path, &original_source).unwrap();
+        let id = open(&path).unwrap().session_id;
+        let main_keys = with_session(id, |s| {
+            s.index
+                .emitter_nodes
+                .iter()
+                .filter(|(_, node)| node.bin == 0)
+                .map(|(key, _)| key.clone())
+                .collect::<std::collections::HashSet<_>>()
+        })
+        .unwrap();
+        let model = model_of(id).unwrap();
+        let meshes = model
+            .emitters
+            .iter()
+            .filter(|e| e.textures.iter().any(|t| t.label == "Mesh"))
+            .count();
+        assert!(meshes > 0, "fixture must contain mesh emitters");
+        let mut probability_emitters: Vec<_> = model
+            .emitters
+            .iter()
+            .filter(|e| main_keys.contains(&e.key))
+            .filter(|e| {
+                e.colors
+                    .birth_color
+                    .as_ref()
+                    .is_some_and(|c| c.storage == model::ColorStorage::ProbabilityTables)
+            })
+            .collect();
+        probability_emitters.sort_by_key(|emitter| {
+            let name = emitter.name.to_ascii_lowercase();
+            !(name.contains("vortex") || name.contains("petal"))
+        });
+        assert!(
+            !probability_emitters.is_empty(),
+            "fixture must contain birthColor probability ranges"
+        );
+        println!(
+            "Real fixture: {} emitters, {} mesh emitters, {} probability birthColors",
+            model.emitters.len(),
+            meshes,
+            probability_emitters.len()
+        );
+        for emitter in probability_emitters.iter().take(3) {
+            let color = emitter.colors.birth_color.as_ref().unwrap();
+            let (table_index, channel) = with_session(id, |s| {
+                let target = color_target(s, &emitter.key, model::ColorSlot::BirthColor).unwrap();
+                target
+                    .channel_tables
+                    .iter()
+                    .enumerate()
+                    .find_map(|(key, channels)| {
+                        channels
+                            .iter()
+                            .position(Option::is_some)
+                            .map(|channel| (key, channel))
+                    })
+                    .unwrap()
+            })
+            .unwrap();
+            let key_index = table_index + usize::from(color.constant_index.is_some());
+            let key = &color.keyframes[key_index];
+            let mut rgba = key.rgba;
+            rgba[channel] = if rgba[channel] < 0.5 { 0.8 } else { 0.2 };
+            let original = session_bytes(id);
+            assert!(add_keyframe(id, &emitter.key, "birthColor", rgba, 0.5)
+                .unwrap()
+                .is_none());
+            assert!(delete_keyframe(id, &emitter.key, "birthColor", key_index)
+                .unwrap()
+                .is_none());
+            assert!(deanimate_color(id, &emitter.key, "birthColor")
+                .unwrap()
+                .is_none());
+            assert_eq!(session_bytes(id), original);
+            let edited = set_keyframe(id, &emitter.key, "birthColor", key_index, rgba, key.time)
+                .unwrap()
+                .unwrap();
+            let edited = edited
+                .emitters
+                .iter()
+                .find(|e| e.key == emitter.key)
+                .unwrap()
+                .colors
+                .birth_color
+                .as_ref()
+                .unwrap();
+            assert_eq!(edited.keyframes[key_index].rgba[channel], rgba[channel]);
+            assert_eq!(edited.keyframes[key_index].time, key.time);
+            undo(id).unwrap().unwrap();
+            assert_eq!(session_bytes(id), original);
+            redo(id).unwrap().unwrap();
+            println!("Probability recolor + undo/redo: {}", emitter.name);
+        }
+        let emitter = model
+            .emitters
+            .iter()
+            .find(|e| {
+                main_keys.contains(&e.key)
+                    && e.colors.color.as_ref().is_some_and(|c| {
+                        c.storage == model::ColorStorage::Curve && c.supports_retime
+                    })
+            })
+            .unwrap();
+        let color = emitter.colors.color.as_ref().unwrap();
+        let index = usize::from(color.constant_index.is_some());
+        set_keyframe(
+            id,
+            &emitter.key,
+            "color",
+            index,
+            color.keyframes[index].rgba,
+            0.371,
+        )
+        .unwrap()
+        .unwrap();
+        let expected = session_bytes(id);
+        let expected_model = serde_json::to_value(model_of(id).unwrap()).unwrap();
+        assert_eq!(save(id, None, true).unwrap(), vec![path.clone()]);
+        close(id);
+        let reopened = open(&path).unwrap().session_id;
+        assert_eq!(session_bytes(reopened), expected);
+        assert_eq!(
+            serde_json::to_value(model_of(reopened).unwrap()).unwrap(),
+            expected_model
+        );
+        close(reopened);
+        assert_eq!(
+            std::fs::read(source).unwrap(),
+            original_source,
+            "source fixture must remain untouched"
+        );
+        println!(
+            "Curve retime + complete model save/reopen: {}",
+            emitter.name
+        );
     }
 }
 

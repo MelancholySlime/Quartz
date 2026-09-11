@@ -3,7 +3,7 @@ members = [".", "crates/quartz-lib"]
 
 [package]
 name = "quartz"
-version = "4.2.9"
+version = "4.3.0"
 edition = "2021"
 default-run = "quartz"
 
@@ -40,9 +40,21 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-# `.modpkg` unpack/pack for the Explorer menu. Pinned to the same version
-# Celestial vendors, so a package one tool writes is one the other reads.
-ltk_modpkg = "0.8.0"
+# `.modpkg` unpack/pack for the Explorer menu, and the `.modpkg` converters. 0.9 is the
+# first version that can embed hashtables, which the converters declare hex-named chunks
+# to; it is also the version `ltk_mod_project` below reads and writes, so the two share
+# one copy. Celestial's own `ltk_mod_project` pulls this same version.
+ltk_modpkg = "0.9.2"
+# The standard mod-project layout (`mod.config.json` + `content/<layer>/<wad>/`): unpack
+# writes it and pack reads it through the crate that DEFINES it, so a folder Quartz
+# unpacks is one Celestial and league-mod pack, and the reverse. Restating the layout
+# here is how the two tools drifted apart before.
+ltk_mod_project = { version = "0.9.2", features = ["modpkg"] }
+# The hashtable grammar and collision check behind the embedded `game` table. Without
+# default features: `wad` would pull a second WAD reader Quartz does not use.
+ltk_hashtable = { version = "0.1.1", default-features = false }
+# `ltk_mod_project` speaks UTF-8 paths.
+camino = "1.2"
 # LeagueToolkit's own magic-byte file-kind table, so a chunk unpacked from a modpkg
 # gets the same extension their tools would give it rather than a second opinion.
 ltk_file = "0.2"
@@ -59,6 +71,11 @@ windows-sys = { version = "0.59", features = [
     "Win32_Storage_FileSystem",
     "Win32_Foundation",
     "Win32_Security",
+    # Native screen-color eyedropper (screen_pick): GDI GetDC/GetPixel/ReleaseDC
+    # for the pixel under the cursor, and GetAsyncKeyState to detect the confirming
+    # left-click / Escape cancel.
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }
 
 # Release settings match Flint's, deliberately.

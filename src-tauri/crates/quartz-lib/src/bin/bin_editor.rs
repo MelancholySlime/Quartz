@@ -597,27 +597,18 @@ fn is_asset_path_string(s: &str) -> bool {
     CONSOLIDATABLE_EXTS.iter().any(|e| lower.ends_with(e))
 }
 
-/// Collect every asset-looking string from a value tree into `out`.
+/// Collect every asset-looking STRING from a value tree into `out`.
 ///
-/// `file =` values count too. Riot's string->hash migration moved mesh fields
-/// (`SkinMeshDataProperties.texture` and its material overrides) from
-/// `string =` to `file =`, and a hashed ref this misses is a ref that never
-/// makes it into the protected set — consolidate then reads the texture as
-/// VFX-exclusive and moves it out of the mesh's folder.
+/// Strings only. A `file =` hash is collected by [`collect_asset_file_refs`]
+/// instead, and the split is deliberate: the two are not interchangeable to
+/// consolidate. A string can be rewritten to follow a file it moved (see
+/// [`rewrite_asset_strings`]); a hash cannot. So strings are what consolidate
+/// may relocate, and hashes are what it must leave alone.
 fn collect_asset_strings(value: &BinValue, out: &mut Vec<String>) {
     match value {
         BinValue::String(s) => {
             if is_asset_path_string(s) {
                 out.push(s.clone());
-            }
-        }
-        BinValue::File(h) => {
-            if *h != 0 {
-                if let Some(path) = crate::bin::ritoshark_bridge::resolve_file_hash(*h) {
-                    if is_asset_path_string(&path) {
-                        out.push(path);
-                    }
-                }
             }
         }
         BinValue::List { items, .. } => {
@@ -637,6 +628,54 @@ fn collect_asset_strings(value: &BinValue, out: &mut Vec<String>) {
         BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => {
             for (_, v) in fields.iter() {
                 collect_asset_strings(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect every asset a value tree names by `file =` hash, resolved to its path.
+///
+/// Riot's string->hash migration moved the mesh fields
+/// (`SkinCharacterDataProperties.texture`, its material overrides, the
+/// `StaticMaterialDef` samplers) from `string =` to `file =`, so these ARE the
+/// body and weapon textures now. Resolution goes through the shared mapper, and a
+/// hash no dictionary can name is simply absent here. A REPATHED bin's hashes are
+/// exactly that unless the repath's `files.txt` was registered first (see
+/// `ritoshark_bridge::register_file_paths`): each one hashes the prefixed path,
+/// which no dictionary has ever seen. Consolidate used to run on such bins with
+/// every mesh reference invisible, judge the texture VFX-exclusive whenever an
+/// effect also named it, and move it: Qiyana's weapon and Exalted Viego's body,
+/// hair and swords landed in `skin<N>_<champ>_particles/` while the mesh kept
+/// pointing at the old path.
+fn collect_asset_file_refs(value: &BinValue, out: &mut Vec<String>) {
+    match value {
+        BinValue::File(h) => {
+            if *h != 0 {
+                if let Some(path) = crate::bin::ritoshark_bridge::resolve_file_hash(*h) {
+                    if is_asset_path_string(&path) {
+                        out.push(path);
+                    }
+                }
+            }
+        }
+        BinValue::List { items, .. } => {
+            for it in items {
+                collect_asset_file_refs(it, out);
+            }
+        }
+        BinValue::Option {
+            value: Some(inner), ..
+        } => collect_asset_file_refs(inner, out),
+        BinValue::Map { entries, .. } => {
+            for (k, v) in entries {
+                collect_asset_file_refs(k, out);
+                collect_asset_file_refs(v, out);
+            }
+        }
+        BinValue::Embed { fields, .. } | BinValue::Pointer { fields, .. } => {
+            for (_, v) in fields.iter() {
+                collect_asset_file_refs(v, out);
             }
         }
         _ => {}
@@ -762,19 +801,25 @@ pub type ConsolidatedAssets = HashMap<String, String>;
 /// across the whole mod rather than one BIN at a time.
 pub type ProtectedAssets = HashSet<String>;
 
-/// Add every asset `bin_path` references from a NON-VFX entry to `out`
-/// (lowercased). Call for each BIN before consolidating any of them.
+/// Add every asset `bin_path` references outside a VFX string to `out`
+/// (lowercased): every string in a non-VFX entry, and every `file =` reference
+/// in ANY entry. Call for each BIN before consolidating any of them.
+///
+/// A `file =` reference is protected even when a VFX entry holds it. Consolidate
+/// rewrites the strings of the files it moves and has no way to rewrite a hash,
+/// so a hashed reference to a moved file dangles no matter which entry it sits
+/// in. Leaving that file where it is costs nothing but tidiness.
 pub fn collect_protected_assets(bin_path: &Path, out: &mut ProtectedAssets) {
     let vfx_class = fnv1a_lower("VfxSystemDefinitionData");
     let Ok(data) = std::fs::read(bin_path) else { return };
     let Ok(bin) = crate::bin::read_bin(&data) else { return };
     for entry in bin.entries.iter() {
-        if entry.class_hash == vfx_class {
-            continue;
-        }
         for (_, value) in entry.fields.iter() {
             let mut found = Vec::new();
-            collect_asset_strings(value, &mut found);
+            collect_asset_file_refs(value, &mut found);
+            if entry.class_hash != vfx_class {
+                collect_asset_strings(value, &mut found);
+            }
             for s in found {
                 out.insert(s.to_lowercase());
             }
@@ -841,12 +886,21 @@ fn consolidate_assets_core(
         Error::InvalidInput(format!("Failed to parse {}: {}", bin_path.display(), e))
     })?;
 
-    // Pass 1: collect VFX vs protected (non-VFX) asset references.
+    // Pass 1: collect VFX vs protected asset references. Only a VFX STRING is a
+    // candidate to move, because only a string can be rewritten to follow the
+    // file (pass 4). A `file =` reference is protected wherever it sits, VFX
+    // entries included: a hash cannot be rewritten, so it would dangle the
+    // moment its file moved.
     let mut vfx_refs: Vec<String> = Vec::new();
     let mut protected: HashSet<String> = HashSet::new();
     for entry in bin.entries.iter() {
         let is_vfx = entry.class_hash == vfx_class;
         for (_, value) in entry.fields.iter() {
+            let mut hashed = Vec::new();
+            collect_asset_file_refs(value, &mut hashed);
+            for s in hashed {
+                protected.insert(s.to_lowercase());
+            }
             let mut found = Vec::new();
             collect_asset_strings(value, &mut found);
             for s in found {

@@ -1,8 +1,11 @@
 //! FULL pipeline against a FRESH PBE Aatrox WAD: extract skin0 -> repath("ebay") ->
-//! inspect until correct. Checks all three things that must line up:
+//! inspect until correct. Checks the things that must line up:
 //!   1. the `image: file =` hash in the bin == xxh64(ebay-prefixed loadscreen path)
 //!   2. the PHYSICAL loadscreen .tex moved to the ebay-prefixed folder on disk
-//!   3. the bin carries a CELMAP trailer mapping that hash -> the ebay path
+//!   3. the bin is written CLEAN: no hash->path trailer appended. That record lives
+//!      in `files.txt` beside the mod, checked in (4). Readers of old trailers stay;
+//!      nothing may produce one.
+//!   4. `files.txt` lists the ebay path, as paths and not hashes
 //! This drives the exact code the extractor-repath UI runs.
 
 use quartz_lib::bin::bin_trailer;
@@ -134,9 +137,13 @@ fn full_pipeline_aatrox_ebay() {
 
     // ── ASSERTIONS (what the user wants) ─────────────────────────────────────
     assert_eq!(img, Some(ebay_hash), "image file= hash is NOT the ebay-prefixed path's hash");
-    assert!(!trailer.is_empty(), "NO trailer written");
-    assert_eq!(trailer.get(&format!("{ebay_hash:016x}")).map(String::as_str), Some(ebay_path),
-        "trailer missing the ebay loadscreen mapping");
+    // (3) Producers are gone: a repathed bin must not carry a trailer. The mapping
+    // is asserted through files.txt below instead.
+    assert!(
+        trailer.is_empty(),
+        "a trailer was written ({} entries); the record belongs in files.txt only",
+        trailer.len()
+    );
     let moved = loads.iter().any(|l| {
         let s = l.to_string_lossy().to_lowercase().replace('\\', "/");
         s.contains("/ebay/characters/aatrox/skins/base/aatroxloadscreen.tex")
