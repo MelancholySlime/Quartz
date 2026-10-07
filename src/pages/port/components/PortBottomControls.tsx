@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Tooltip } from '@mui/material';
 import { Undo2 as UndoIcon } from 'lucide-react';
 import type { PortMode } from '@/lib/stores/portStore';
+import { useTranslation } from '@/i18n';
 
 export interface PortActionButton {
     id: string;
@@ -43,6 +44,7 @@ export default function PortBottomControls({
     mode,
     onModeChange,
 }: PortBottomControlsProps) {
+    const { t } = useTranslation();
     const canSave = !isProcessing && hasChangesToSave();
     // Keep the action buttons MOUNTED whenever there's a target. Every port/
     // delete/save/undo runs through a task that briefly flips `isProcessing`
@@ -64,9 +66,9 @@ export default function PortBottomControls({
                                 className={`port-mode-switch__opt${mode === m ? ' is-active' : ''}`}
                                 aria-pressed={mode === m}
                                 onClick={() => onModeChange(m)}
-                                title={m === 'vfx' ? 'VFX systems and emitters' : 'Animation clips and events'}
+                                title={m === 'vfx' ? t('port.vfxModeTip') : t('port.anmModeTip')}
                             >
-                                {m === 'vfx' ? 'VFX' : 'ANM'}
+                                {m === 'vfx' ? t('port.vfxMode') : t('port.anmMode')}
                             </button>
                         ))}
                     </div>
@@ -98,7 +100,7 @@ export default function PortBottomControls({
                     className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
                     onClick={handleUndo}
                     disabled={!canUndo}
-                    title={canUndo ? 'Undo last change' : 'Nothing to undo'}
+                    title={canUndo ? t('port.undoTip') : t('port.nothingToUndo')}
                 >
                     <span className="dl-icon"><UndoIcon size={15} /></span>
                 </button>
@@ -106,9 +108,9 @@ export default function PortBottomControls({
                     className="dl-btn dl-btn--sm port-save-btn"
                     onClick={handleSave}
                     disabled={!canSave}
-                    title={hasChangesToSave() ? 'Save changes to file' : 'No changes to save'}
+                    title={hasChangesToSave() ? t('port.saveTip') : t('port.noChangesToSave')}
                 >
-                    Save
+                    {t('port.saveBtn')}
                 </button>
             </div>
         </div>

@@ -9,7 +9,7 @@
   "bundle": {
     "active": true,
     "targets": "nsis",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/icon.ico",
       "icons/icon.png"

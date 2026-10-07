@@ -17,6 +17,7 @@ import { AppReadmeModal } from './AppReadmeModal';
 import { type RitoSharkApp } from './ritosharkApps';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { HashSyncIndicator } from './HashSyncIndicator';
+import { useTranslation } from '@/i18n';
 
 const win = getCurrentWindow();
 
@@ -26,6 +27,7 @@ interface TitleBarProps {
 }
 
 export function TitleBar({ collapsed = false }: TitleBarProps) {
+    const { t } = useTranslation();
     const setPage = useNavigationStore((s) => s.setPage);
     const jadeInteropEnabled = useUiPrefsStore((s) => s.communicateWithJade);
     const pick = useFileExplorer();
@@ -73,7 +75,7 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
         setSuiteOpen(false);
         if (app.id === 'jade') {
             if (!jadeInteropEnabled) {
-                window.alert('Jade communication is disabled in Settings > External Tools.');
+                window.alert(t('titlebar.jadeDisabledAlert'));
                 return;
             }
             openJade();
@@ -92,9 +94,9 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
                     alt=""
                     onClick={() => setPage('home')}
                     className={`q-titlebar-logo ${collapsed ? '' : 'is-large'}`}
-                    title="Home"
+                    title={t('nav.home')}
                 />
-                <span data-tauri-drag-region className="q-titlebar-title">Quartz</span>
+                <span data-tauri-drag-region className="q-titlebar-title">{t('titlebar.brand')}</span>
                 {collapsed && <CollapsedNav />}
             </div>
             <div className="q-titlebar-right">
@@ -115,7 +117,7 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
                             ref={suiteRef}
                             type="button"
                             className="q-topnavbtn q-jade-launch is-active"
-                            aria-label="RitoShark tools"
+                            aria-label={t('titlebar.ritosharkTools')}
                             aria-haspopup="menu"
                             aria-expanded
                             onClick={() => setSuiteOpen(false)}
@@ -123,12 +125,12 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
                             <img src="/ritoshark.png" alt="" className="q-jade-logo" />
                         </button>
                     ) : (
-                        <Tooltip content="RitoShark tools" side="bottom">
+                        <Tooltip content={t('titlebar.ritosharkTools')} side="bottom">
                             <button
                                 ref={suiteRef}
                                 type="button"
                                 className="q-topnavbtn q-jade-launch"
-                                aria-label="RitoShark tools"
+                                aria-label={t('titlebar.ritosharkTools')}
                                 aria-haspopup="menu"
                                 aria-expanded={false}
                                 onClick={() => setSuiteOpen(true)}
@@ -137,22 +139,22 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
                             </button>
                         </Tooltip>
                     )}
-                    <Tooltip content="Asset Explorer" side="bottom">
+                    <Tooltip content={t('titlebar.assetExplorer')} side="bottom">
                         <button
                             type="button"
                             className="q-topnavbtn"
-                            aria-label="Asset Explorer"
+                            aria-label={t('titlebar.assetExplorer')}
                             onClick={openExplorer}
                         >
                             <FolderOpen size={17} />
                         </button>
                     </Tooltip>
-                    <Tooltip content="Community" side="bottom">
+                    <Tooltip content={t('titlebar.community')} side="bottom">
                         <button
                             ref={communityRef}
                             type="button"
                             className={`q-topnavbtn ${communityOpen ? 'is-active' : ''}`}
-                            aria-label="Community"
+                            aria-label={t('titlebar.community')}
                             onClick={() => setCommunityOpen((v) => !v)}
                         >
                             <Globe size={17} />
@@ -162,9 +164,9 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
                     <span className="q-topnav-sep" />
                 </div>
                 <div className="q-winbtns">
-                    <button onClick={minimize} title="Minimize" className="q-winbtn"><Minus size={17} strokeWidth={2} /></button>
-                    <button onClick={maximize} title="Maximize" className="q-winbtn"><Square size={13} strokeWidth={2} /></button>
-                    <button onClick={close} title="Close" className="q-winbtn q-winbtn--close"><X size={17} strokeWidth={2} /></button>
+                    <button onClick={minimize} title={t('titlebar.minimize')} className="q-winbtn"><Minus size={17} strokeWidth={2} /></button>
+                    <button onClick={maximize} title={t('titlebar.maximize')} className="q-winbtn"><Square size={13} strokeWidth={2} /></button>
+                    <button onClick={close} title={t('titlebar.close')} className="q-winbtn q-winbtn--close"><X size={17} strokeWidth={2} /></button>
                 </div>
             </div>
             {communityOpen && communityRef.current && createPortal(
@@ -200,13 +202,15 @@ export function TitleBar({ collapsed = false }: TitleBarProps) {
 function TopNavBtn({ item }: { item: NavItem }) {
     const page = useNavigationStore((s) => s.page);
     const setPage = useNavigationStore((s) => s.setPage);
+    const { t } = useTranslation();
+    const label = t(`nav.${item.id}`) || item.label;
     const Icon = item.icon;
     return (
-        <Tooltip content={item.label} side="bottom">
+        <Tooltip content={label} side="bottom">
             <button
                 type="button"
                 className={`q-topnavbtn ${page === item.id ? 'is-active' : ''}`}
-                aria-label={item.label}
+                aria-label={label}
                 onClick={() => setPage(item.id)}
             >
                 <Icon size={17} />

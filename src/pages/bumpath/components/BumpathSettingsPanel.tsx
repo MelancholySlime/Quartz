@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
+import { useTranslation } from '@/i18n';
 
 interface BumpathSettingsPanelProps {
     panelStyle: SxProps<Theme>;
@@ -54,6 +55,7 @@ const BumpathSettingsPanel = React.memo(function BumpathSettingsPanel({
     setHideDataFolderBins,
     saveSettings,
 }: BumpathSettingsPanelProps) {
+    const { t } = useTranslation();
     return (
         <Box
             data-bumpath-settings-panel
@@ -67,23 +69,23 @@ const BumpathSettingsPanel = React.memo(function BumpathSettingsPanel({
             }}
         >
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                {toggleRow('Ignore Missing Files', ignoreMissing, (v) => {
+                {toggleRow(t('bumpath.settings.ignoreMissing'), ignoreMissing, (v) => {
                     setIgnoreMissing(v);
                     saveSettings('BumpathIgnoreMissing', v);
                 })}
-                {toggleRow('Combine Linked BINs to Source BINs', combineLinked, (v) => {
+                {toggleRow(t('bumpath.settings.combineLinked'), combineLinked, (v) => {
                     setCombineLinked(v);
                     saveSettings('BumpathCombineLinked', v);
                 })}
-                {toggleRow('Split VFX into separate BINs', splitVfx, (v) => {
+                {toggleRow(t('bumpath.settings.splitVfx'), splitVfx, (v) => {
                     setSplitVfx(v);
                     saveSettings('BumpathSplitVfx', v);
                 })}
-                {toggleRow('Organize VFX assets into particle folders', consolidateAssets, (v) => {
+                {toggleRow(t('bumpath.settings.consolidateAssets'), consolidateAssets, (v) => {
                     setConsolidateAssets(v);
                     saveSettings('BumpathConsolidateAssets', v);
                 })}
-                {toggleRow('Hide path in bin list', hideDataFolderBins, (v) => {
+                {toggleRow(t('bumpath.settings.hideDataFolderBins'), hideDataFolderBins, (v) => {
                     setHideDataFolderBins(v);
                     saveSettings('BumpathHideDataFolderBins', v);
                 })}

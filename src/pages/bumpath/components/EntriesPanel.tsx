@@ -3,6 +3,7 @@ import { Box, CircularProgress, List, ListItem, Typography } from '@mui/material
 import { ChevronRight as ChevronRightIcon, ExpandMore as ExpandMoreIcon, Check as CheckIcon, CheckBox as CheckBoxIcon, Clear as ClearIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { groupReferencedFiles } from '../utils/referencedFiles';
 import type { ScannedData, ScannedEntry } from '../utils/types';
+import { useTranslation } from '@/i18n';
 
 interface EntriesPanelProps {
     isScanning: boolean;
@@ -49,6 +50,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
     setSettingsExpanded,
     setSettingsAutoOpened,
 }: EntriesPanelProps) {
+    const { t } = useTranslation();
     return (
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* List header: entry selection + missing-only filter (moved out of
@@ -71,7 +73,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
                     data-bumpath-select-all
                 >
                     <span className="dl-icon"><CheckBoxIcon /></span>
-                    <span>Select All</span>
+                    <span>{t('bumpath.selectAll')}</span>
                 </button>
 
                 <button
@@ -81,7 +83,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
                     disabled={!scannedData || selectedEntriesSize === 0}
                 >
                     <span className="dl-icon"><ClearIcon /></span>
-                    <span>Deselect All</span>
+                    <span>{t('bumpath.deselectAll')}</span>
                 </button>
 
                 <label
@@ -112,7 +114,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
                             transition: 'color 180ms ease',
                         }}
                     >
-                        Show Missing Files Only
+                        {t('bumpath.showMissingOnly')}
                     </span>
                 </label>
 
@@ -124,7 +126,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
                         setSettingsAutoOpened(false);
                     }}
                     data-bumpath-settings
-                    title="Bumpath settings"
+                    title={t('bumpath.settingsTitle')}
                 >
                     <span className="dl-icon"><SettingsIcon /></span>
                 </button>
@@ -144,7 +146,7 @@ const EntriesPanel = React.memo(function EntriesPanel({
                     >
                         <CircularProgress sx={{ color: 'var(--accent-primary)' }} />
                         <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
-                            Scanning BIN files...
+                            {t('bumpath.scanningBins')}
                         </Typography>
                     </Box>
                 ) : scannedData ? (
@@ -387,13 +389,13 @@ const EntriesPanel = React.memo(function EntriesPanel({
                         }}
                     >
                         <Typography variant="h6" sx={{ color: 'var(--text-secondary)' }}>
-                            No scanned data
+                            {t('bumpath.noScannedData')}
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
-                            Drag and drop a source folder into Bumpath, or click "Add Source Folders" to begin.
+                            {t('bumpath.noScannedDataHint')}
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'var(--text-secondary)', opacity: 0.8, fontSize: '0.78rem' }}>
-                            Then select a main BIN and continue with Quick Repath (recommended) or the normal flow.
+                            {t('bumpath.noScannedDataHintSub')}
                         </Typography>
                     </Box>
                 )}

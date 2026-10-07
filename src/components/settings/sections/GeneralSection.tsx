@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { Update } from '@tauri-apps/plugin-updater';
-import { Download, RefreshCw, Plug, PanelLeftClose, FolderOpen, ListTree, SlidersHorizontal, FileText } from 'lucide-react';
-import { FormGroup, Button, CardRow, Switch, cardSurface } from '../primitives';
+import { Download, RefreshCw, Plug, PanelLeftClose, FolderOpen, ListTree, SlidersHorizontal, FileText, Languages } from 'lucide-react';
+import { FormGroup, Button, CardRow, Switch, CustomSelect, cardSurface } from '../primitives';
 import { useConfigStore, useUiPrefsStore } from '@/lib/stores';
 import { getAppInfo } from '@/lib/api';
 import { checkForUpdate, installUpdate } from '@/lib/api/updater';
 import { showUpdateNotes } from '@/components/update/updateShowcaseState';
 import { log } from '@/lib/util/logger';
+import { useTranslation, type SupportedLocale } from '@/i18n';
 
 export function GeneralSection() {
+    const { t, locale, setLocale, supportedLocales } = useTranslation();
     const autoUpdateEnabled = useConfigStore((s) => s.settings.autoUpdateEnabled);
     const updateSettings = useConfigStore((s) => s.update);
     const communicateWithJade = useUiPrefsStore((s) => s.communicateWithJade);
@@ -27,74 +29,88 @@ export function GeneralSection() {
     }, []);
 
     const checkUpdate = async () => {
-        setChecking(true); setUpdateMessage('Checking…');
+        setChecking(true); setUpdateMessage(t('settings.general.checking'));
         try {
             const { info, update } = await checkForUpdate();
             setPending(update);
-            setUpdateMessage(info.available ? `Update available: v${info.version}` : 'You are up to date.');
-        } catch (e) { log.error('checkForUpdate', e); setUpdateMessage('Update check failed.'); }
+            setUpdateMessage(info.available ? t('settings.general.updateAvailable', { version: info.version ?? '' }) : t('settings.general.upToDate'));
+        } catch (e) { log.error('checkForUpdate', e); setUpdateMessage(t('settings.general.updateCheckFailed')); }
         finally { setChecking(false); }
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <FormGroup label="Preferences" icon={<SlidersHorizontal size={15} />}>
+            <FormGroup label={t('settings.general.preferences')} icon={<SlidersHorizontal size={15} />}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <CardRow
+                        icon={<Languages size={18} />}
+                        label={t('settings.general.language')}
+                        description={t('settings.general.languageDesc')}
+                        control={
+                            <div style={{ width: '140px' }}>
+                                <CustomSelect
+                                    value={locale}
+                                    onChange={(v) => setLocale(v as SupportedLocale)}
+                                    options={supportedLocales}
+                                />
+                            </div>
+                        }
+                    />
+                    <CardRow
                         icon={<Plug size={18} />}
-                        label="Communicate with Jade"
-                        description="Talk to a running Jade instance"
+                        label={t('settings.general.communicateWithJade')}
+                        description={t('settings.general.communicateWithJadeDesc')}
                         onActivate={() => set('communicateWithJade', !communicateWithJade)}
                         control={<Switch checked={communicateWithJade} onChange={(c) => set('communicateWithJade', c)} />}
                     />
                     <CardRow
                         icon={<PanelLeftClose size={18} />}
-                        label="Collapse Sidebar"
-                        description="Hide the navigation rail"
+                        label={t('settings.general.collapseSidebar')}
+                        description={t('settings.general.collapseSidebarDesc')}
                         onActivate={() => set('sidebarCollapsed', !sidebarCollapsed)}
                         control={<Switch checked={sidebarCollapsed} onChange={(c) => set('sidebarCollapsed', c)} />}
                     />
                     <CardRow
                         icon={<FolderOpen size={18} />}
-                        label="Use native file dialog"
-                        description="Use the Windows file browser"
+                        label={t('settings.general.useNativeFileDialog')}
+                        description={t('settings.general.useNativeFileDialogDesc')}
                         onActivate={() => set('useNativeFileBrowser', !useNative)}
                         control={<Switch checked={useNative} onChange={(c) => set('useNativeFileBrowser', c)} />}
                     />
                     <CardRow
                         icon={<ListTree size={18} />}
-                        label="Expand VFX Systems When Loading Bins"
-                        description="Auto-expand VFX trees on open"
+                        label={t('settings.general.expandVfxSystems')}
+                        description={t('settings.general.expandVfxSystemsDesc')}
                         onActivate={() => set('expandSystemsOnLoad', !expand)}
                         control={<Switch checked={expand} onChange={(c) => set('expandSystemsOnLoad', c)} />}
                     />
                 </div>
             </FormGroup>
 
-            <FormGroup label="App Updates" icon={<RefreshCw size={15} />}>
+            <FormGroup label={t('settings.general.appUpdates')} icon={<RefreshCw size={15} />}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <CardRow
                         icon={<Download size={18} />}
-                        label="Automatic Updates"
-                        description="Install updates automatically before Quartz opens"
+                        label={t('settings.general.autoUpdates')}
+                        description={t('settings.general.autoUpdatesDesc')}
                         onActivate={() => void updateSettings({ autoUpdateEnabled: !autoUpdateEnabled })}
                         control={<Switch checked={autoUpdateEnabled} onChange={(checked) => void updateSettings({ autoUpdateEnabled: checked })} />}
                     />
                     <div className="settings-card" style={{ ...cardSurface, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {version && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Current Version: {version}</div>}
+                        {version && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('settings.general.currentVersion', { version })}</div>}
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <Button icon={<RefreshCw size={16} style={checking ? { animation: 'spin 1s linear infinite' } : undefined} />} variant="secondary" onClick={checkUpdate} disabled={checking}>
-                                {checking ? 'Checking...' : 'Check for Updates'}
+                                {checking ? t('settings.general.checking') : t('settings.general.checkForUpdates')}
                             </Button>
                             {/* The showcase appears once per version and is then
                                 remembered, so this is the only way back to the notes
                                 for the build you are already on. */}
                             <Button icon={<FileText size={16} />} variant="secondary" onClick={showUpdateNotes}>
-                                Patch Notes
+                                {t('settings.general.patchNotes')}
                             </Button>
                             {pending && (
-                                <Button icon={<Download size={16} />} variant="primary" onClick={() => installUpdate(pending).catch((e) => { log.error('installUpdate', e); setUpdateMessage('Install failed.'); })}>
-                                    Install & Restart
+                                <Button icon={<Download size={16} />} variant="primary" onClick={() => installUpdate(pending).catch((e) => { log.error('installUpdate', e); setUpdateMessage(t('settings.general.installFailed')); })}>
+                                    {t('settings.general.installAndRestart')}
                                 </Button>
                             )}
                         </div>
@@ -105,3 +121,4 @@ export function GeneralSection() {
         </div>
     );
 }
+

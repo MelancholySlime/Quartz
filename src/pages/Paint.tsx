@@ -27,6 +27,7 @@ import {
     type PaletteStopInput, type RecolorOptionsInput,
 } from '@/lib/api';
 import { useNavigationStore, useNotificationStore, usePaintStore, useUiPrefsStore, type HslValues, type PaintState as PaintStoreState } from '@/lib/stores';
+import { useTranslation } from '@/i18n';
 import { useFileDrop } from '@/lib/util/useFileDrop';
 import { recordRecentBin } from '@/lib/util/recordRecentBin';
 import { DropOverlay, RecentBinsList } from '@/components/ui';
@@ -94,9 +95,10 @@ const ddTriggerSx = {
    (it used to sit inside PaletteManager, which unmounts in HSL/Shift modes and
    trapped the user there). */
 function ModeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const { t } = useTranslation();
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-            <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Mode</Typography>
+            <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('paintPage.mode')}</Typography>
             <Select
                 value={value}
                 onChange={(e: SelectChangeEvent) => onChange(e.target.value)}
@@ -105,12 +107,12 @@ function ModeSelect({ value, onChange }: { value: string; onChange: (v: string) 
                 sx={{ ...ddTriggerSx, minWidth: '148px' }}
                 MenuProps={{ PaperProps: { sx: ddMenuPaperSx } }}
             >
-                <MenuItem value="random">Normal</MenuItem>
-                <MenuItem value="random-keyframe">Random Gradient</MenuItem>
-                <MenuItem value="linear">Linear Gradient</MenuItem>
-                <MenuItem value="shift">HSL Shift</MenuItem>
-                <MenuItem value="shift-hue">Shift Hue</MenuItem>
-                <MenuItem value="materials">Materials Only</MenuItem>
+                <MenuItem value="random">{t('paintPage.modes.normal')}</MenuItem>
+                <MenuItem value="random-keyframe">{t('paintPage.modes.randomGradient')}</MenuItem>
+                <MenuItem value="linear">{t('paintPage.modes.linearGradient')}</MenuItem>
+                <MenuItem value="shift">{t('paintPage.modes.hslShift')}</MenuItem>
+                <MenuItem value="shift-hue">{t('paintPage.modes.shiftHue')}</MenuItem>
+                <MenuItem value="materials">{t('paintPage.modes.materialsOnly')}</MenuItem>
             </Select>
         </Box>
     );
@@ -119,16 +121,17 @@ function ModeSelect({ value, onChange }: { value: string; onChange: (v: string) 
 /* ── Hue / HSL / blend-chance sub-controls (committed sliders) ──────────── */
 
 function ShiftHueControl({ value, onCommit, onStatus }: { value: number; onCommit: (v: number) => void; onStatus: (s: string) => void }) {
+    const { t } = useTranslation();
     const [draft, setDraft] = useState(value);
     useEffect(() => { setDraft(value); }, [value]);
     return (
         <Box sx={{ padding: '8px 40px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{ ...controlLabelStyle, width: 80 }}>Target: {draft}°</Typography>
+                <Typography sx={{ ...controlLabelStyle, width: 80 }}>{t('paintPage.targetHue', { draft })}</Typography>
                 <Slider
                     value={draft}
                     onChange={(_, v) => setDraft(Array.isArray(v) ? v[0] : v)}
-                    onChangeCommitted={(_, v) => { const next = Array.isArray(v) ? v[0] : v; setDraft(next); onCommit(next); onStatus(`Hue Target Ready: ${next}° (Press Recolor to apply)`); }}
+                    onChangeCommitted={(_, v) => { const next = Array.isArray(v) ? v[0] : v; setDraft(next); onCommit(next); onStatus(t('paintPage.hueTargetReady', { next })); }}
                     min={0} max={360} size="small"
                     sx={{
                         '& .MuiSlider-track': { background: 'transparent', border: 'none' },
@@ -143,6 +146,7 @@ function ShiftHueControl({ value, onCommit, onStatus }: { value: number; onCommi
 }
 
 function HslShiftControls({ values, onCommit, onStatus }: { values: HslValues; onCommit: (v: HslValues) => void; onStatus: (s: string) => void }) {
+    const { t } = useTranslation();
     const [draft, setDraft] = useState(values);
     useEffect(() => { setDraft(values); }, [values.h, values.s, values.l]);
     const commitPart = (part: keyof HslValues, value: number | number[]) => {
@@ -150,20 +154,20 @@ function HslShiftControls({ values, onCommit, onStatus }: { values: HslValues; o
         const next = { ...draft, [part]: nextValue };
         setDraft(next);
         onCommit(next);
-        onStatus(`HSL Shift Ready: H:${next.h}° S:${next.s}% L:${next.l}%`);
+        onStatus(t('paintPage.hslShiftReady', { h: next.h, s: next.s, l: next.l }));
     };
     return (
         <Box sx={{ padding: '8px 40px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{ ...controlLabelStyle, width: 80 }}>Hue: {draft.h}°</Typography>
+                <Typography sx={{ ...controlLabelStyle, width: 80 }}>{t('paintPage.hue', { draft: draft.h })}</Typography>
                 <Slider value={draft.h} onChange={(_, v) => setDraft(p => ({ ...p, h: Array.isArray(v) ? v[0] : v }))} onChangeCommitted={(_, v) => commitPart('h', v)} min={-180} max={180} size="small" />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{ ...controlLabelStyle, width: 80 }}>Sat: {draft.s}%</Typography>
+                <Typography sx={{ ...controlLabelStyle, width: 80 }}>{t('paintPage.sat', { draft: draft.s })}</Typography>
                 <Slider value={draft.s} onChange={(_, v) => setDraft(p => ({ ...p, s: Array.isArray(v) ? v[0] : v }))} onChangeCommitted={(_, v) => commitPart('s', v)} min={-100} max={100} size="small" />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{ ...controlLabelStyle, width: 80 }}>Lig: {draft.l}%</Typography>
+                <Typography sx={{ ...controlLabelStyle, width: 80 }}>{t('paintPage.lig', { draft: draft.l })}</Typography>
                 <Slider value={draft.l} onChange={(_, v) => setDraft(p => ({ ...p, l: Array.isArray(v) ? v[0] : v }))} onChangeCommitted={(_, v) => commitPart('l', v)} min={-100} max={100} size="small" />
             </Box>
         </Box>
@@ -207,6 +211,7 @@ function Paint() {
     const pick = useFileExplorer();
     const notify = useNotificationStore((s) => s.push);
     const isMinecraftStyle = useMinecraftStyle();
+    const { t } = useTranslation();
 
     // === RESIDENT STATE (persists across page swaps via the store) ===
     const filePath = usePaintStore((s) => s.filePath);
@@ -1171,16 +1176,16 @@ function Paint() {
                         </Box>
 
                         <button onClick={handleSelectByBlendMode} className="dl-btn dl-btn--primary dl-btn--sm">
-                            Select BM {blendModeSelect}
+                            {t('paintPage.selectBm', { mode: blendModeSelect })}
                         </button>
 
                         <button
                             onClick={handleApplyBlendMode}
                             className="dl-btn dl-btn--secondary dl-btn--sm"
                             disabled={selection.size === 0}
-                            title={`Set every selected emitter to BlendMode ${blendModeSelect}. One undo step.`}
+                            title={t('paintPage.setBmTitle', { mode: blendModeSelect })}
                         >
-                            Set BM {blendModeSelect}
+                            {t('paintPage.setBm', { mode: blendModeSelect })}
                         </button>
 
                         <BlendModeChanceSlider value={blendModeChance} onCommit={setBlendModeChance} />
@@ -1197,7 +1202,7 @@ function Paint() {
                             <Checkbox size="small" checked={targetBC} onChange={e => setTargetBC(e.target.checked)} sx={{ color: 'var(--text-muted)', '&.Mui-checked': { color: 'var(--accent-primary)' }, padding: '2px' }} /> BC
                         </Box>
                         <Box sx={{ ...controlLabelStyle }}>
-                            <Checkbox size="small" checked={targetBaseColor} onChange={e => setTargetBaseColor(e.target.checked)} sx={{ color: 'var(--text-muted)', '&.Mui-checked': { color: 'var(--accent-primary)' }, padding: '2px' }} /> Color
+                            <Checkbox size="small" checked={targetBaseColor} onChange={e => setTargetBaseColor(e.target.checked)} sx={{ color: 'var(--text-muted)', '&.Mui-checked': { color: 'var(--accent-primary)' }, padding: '2px' }} /> {t('paintPage.color')}
                         </Box>
 
                     </Box>
@@ -1213,7 +1218,7 @@ function Paint() {
                 }}>
                     <PaletteIcon sx={{ color: 'var(--accent-primary)', fontSize: 18 }} />
                     <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
-                        Materials Only Mode / VFX systems hidden
+                        {t('paintPage.materialsOnlyTitle')}
                     </Typography>
                 </Box>
             )}
@@ -1225,7 +1230,7 @@ function Paint() {
                     borderBottom: isMinecraftStyle ? '1px solid #000000' : '1px solid var(--border)',
                     background: isMinecraftStyle ? '#353535' : 'var(--bg-tertiary)', flexShrink: 0,
                 }}>
-                    <Typography sx={{ ...controlLabelStyle, minWidth: '80px' }}>Filter ({targetColors.length}):</Typography>
+                    <Typography sx={{ ...controlLabelStyle, minWidth: '80px' }}>{t('paintPage.filterCount', { count: targetColors.length })}</Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flex: 1, alignItems: 'center' }}>
                         {targetColors.map((color, index) => {
                             const isDelete = deleteTargetIndex === index;
@@ -1270,7 +1275,7 @@ function Paint() {
                                             applyTarget();
                                         }, { alpha: startA, onAlpha: (a) => { curA = a; applyTarget(); } });
                                     }}
-                                    title={isDelete ? 'Click again to delete' : `${getColorDescription(color)} - Click to select for deletion, Double-click to edit`}
+                                    title={isDelete ? t('paintPage.clickToDelete') : t('paintPage.clickToSelectDelete', { desc: getColorDescription(color) })}
                                 >
                                     {isDelete ? '-' : ''}
                                 </Box>
@@ -1291,13 +1296,13 @@ function Paint() {
                                     setTargetColors(prev => [...prev, [h.vec4[0], h.vec4[1], h.vec4[2], 1]]);
                                 });
                             }}
-                            title="Add target color"
+                            title={t('paintPage.addTargetColor')}
                         >
                             +
                         </Box>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: '200px' }}>
-                        <Typography sx={{ ...controlLabelStyle, minWidth: '60px', fontSize: '0.7rem' }}>Tol: {colorTolerance}</Typography>
+                        <Typography sx={{ ...controlLabelStyle, minWidth: '60px', fontSize: '0.7rem' }}>{t('paintPage.tol', { tol: colorTolerance })}</Typography>
                         <Slider value={colorTolerance} onChange={(_, v) => setColorTolerance(Array.isArray(v) ? v[0] : v)} min={0} max={100} size="small" sx={{ flex: 1 }} />
                     </Box>
                 </Box>
@@ -1322,7 +1327,7 @@ function Paint() {
                 <TextField
                     className="paint2-search-field"
                     size="small"
-                    placeholder="Filter systems..."
+                    placeholder={t('paintPage.filterSystems')}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     variant="standard"
@@ -1340,9 +1345,9 @@ function Paint() {
                         sx={{ ...ddTriggerSx, minWidth: '100px', fontSize: '0.75rem', color: variantFilter === 'all' ? 'var(--text-secondary)' : 'var(--accent-primary)' }}
                         MenuProps={{ PaperProps: { sx: ddMenuPaperSx } }}
                     >
-                        <MenuItem value="all">All Vars</MenuItem>
-                        <MenuItem value="v1">Variant 1</MenuItem>
-                        <MenuItem value="v2">Variant 2</MenuItem>
+                        <MenuItem value="all">{t('paintPage.allVars')}</MenuItem>
+                        <MenuItem value="v1">{t('paintPage.variant1')}</MenuItem>
+                        <MenuItem value="v2">{t('paintPage.variant2')}</MenuItem>
                     </Select>
                 </Box>
 
@@ -1365,31 +1370,31 @@ function Paint() {
                     } }}
                 >
                     <Box className="paint2-filter-section-title" sx={{ px: 2, py: 1, borderBottom: '1px solid var(--border)', mb: 1 }}>
-                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--accent-primary)', fontWeight: 700, opacity: 0.6 }}>SETTINGS</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--accent-primary)', fontWeight: 700, opacity: 0.6 }}>{t('paintPage.settingsTitle')}</Typography>
                     </Box>
                     <MenuItem onClick={() => { const next = !autoExpand; setAutoExpandWithRef(next); applyAutoExpand(next); }}>
                         <Checkbox size="small" checked={autoExpand} sx={{ color: 'var(--text-muted)', p: 0, mr: 1, '&.Mui-checked': { color: 'var(--accent-primary)' } }} />
-                        Auto-expand on load
+                        {t('paintPage.autoExpand')}
                     </MenuItem>
                     <MenuItem onClick={() => setIgnoreBlackWhite(!ignoreBlackWhite)}>
                         <Checkbox size="small" checked={ignoreBlackWhite} sx={{ color: 'var(--text-muted)', p: 0, mr: 1, '&.Mui-checked': { color: 'var(--accent-primary)' } }} />
-                        Ignore B/W
+                        {t('paintPage.ignoreBW')}
                     </MenuItem>
                     <MenuItem onClick={() => setColorFilterEnabled(!colorFilterEnabled)}>
                         <Checkbox size="small" checked={colorFilterEnabled} sx={{ color: 'var(--text-muted)', p: 0, mr: 1, '&.Mui-checked': { color: 'var(--accent-primary)' } }} />
-                        Color Filter
+                        {t('paintPage.colorFilter')}
                     </MenuItem>
                     <Box className="paint2-filter-section-title" sx={{ px: 2, py: 1, mt: 1, borderTop: '1px solid var(--border)' }}>
-                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>VIEW</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('paintPage.viewTitle')}</Typography>
                     </Box>
                     <MenuItem onClick={() => {
                         if (model) { setExpandedSystems(new Set(model.systemOrder)); setExpandedMaterials(new Set(model.materialOrder || [])); }
                         setFilterAnchor(null);
                     }}>
-                        Expand All
+                        {t('paintPage.expandAll')}
                     </MenuItem>
                     <MenuItem onClick={() => { setExpandedSystems(new Set()); setExpandedMaterials(new Set()); setFilterAnchor(null); }}>
-                        Collapse All
+                        {t('paintPage.collapseAll')}
                     </MenuItem>
                 </Menu>
             </Box>
@@ -1445,11 +1450,11 @@ function Paint() {
                         >
                             <FolderOpenIcon size={40} color="var(--accent-primary)" strokeWidth={1.5} />
                             <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.92rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                                Drag a <b style={{ color: 'var(--text-primary)' }}>.bin</b> here
+                                {t('paintPage.dragBinHere')}
                             </Typography>
                             <button onClick={(e) => { e.stopPropagation(); handleFileOpen(); }} disabled={isLoading} className="dl-btn dl-btn--primary">
                                 <span className="dl-icon"><FolderOpenIcon size={14} /></span>
-                                <span>Open Bin</span>
+                                <span>{t('paintPage.openBin')}</span>
                             </button>
                         </Box>
 
@@ -1487,17 +1492,17 @@ function Paint() {
 
                 {/* Right: edit actions */}
                 <Box sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
-                    <button onClick={handleUndo} disabled={!canUndo} className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon" title="Undo (Ctrl+Z)">
+                    <button onClick={handleUndo} disabled={!canUndo} className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon" title={t('paintPage.undo')}>
                         <span className="dl-icon"><UndoIcon size={15} /></span>
                     </button>
-                    <button onClick={handleRedo} disabled={!canRedo} className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon" title="Redo (Ctrl+Alt+Z)">
+                    <button onClick={handleRedo} disabled={!canRedo} className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon" title={t('paintPage.redo')}>
                         <span className="dl-icon"><RedoIcon size={15} /></span>
                     </button>
                     <button onClick={handleRecolor} disabled={selection.size === 0} className="dl-btn dl-btn--primary dl-btn--sm paint2-recolor-btn">
-                        Recolor Selected ({visibleSelectionCount})
+                        {t('paintPage.recolorSelected', { count: visibleSelectionCount })}
                     </button>
                     <button onClick={() => void handleSave()} disabled={isLoading || fileSaved} className="dl-btn dl-btn--sm paint2-save-btn">
-                        Save Bin
+                        {t('paintPage.saveBin')}
                     </button>
                 </Box>
             </Box>
@@ -1508,10 +1513,10 @@ function Paint() {
                 onClose={() => setPaletteNameDialogOpen(false)}
                 PaperProps={{ sx: { background: 'var(--bg-secondary)', border: '1px solid var(--border)', minWidth: '320px' } }}
             >
-                <DialogTitle sx={{ color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Save Palette</DialogTitle>
+                <DialogTitle sx={{ color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>{t('paintPage.savePaletteTitle')}</DialogTitle>
                 <DialogContent>
                     <TextField
-                        autoFocus fullWidth size="small" label="Palette Name"
+                        autoFocus fullWidth size="small" label={t('paintPage.paletteName')}
                         value={newPaletteName}
                         onChange={(e) => setNewPaletteName(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && confirmSavePalette()}
@@ -1523,8 +1528,8 @@ function Paint() {
                     />
                 </DialogContent>
                 <DialogActions sx={{ padding: '16px 24px' }}>
-                    <Button onClick={() => setPaletteNameDialogOpen(false)} sx={{ color: 'var(--text-muted)', textTransform: 'none' }}>Cancel</Button>
-                    <Button onClick={confirmSavePalette} variant="contained" sx={{ background: 'var(--accent-primary)', color: 'var(--text-primary)', fontWeight: 700, textTransform: 'none', '&:hover': { background: 'var(--accent-hover)' } }}>Save Palette</Button>
+                    <Button onClick={() => setPaletteNameDialogOpen(false)} sx={{ color: 'var(--text-muted)', textTransform: 'none' }}>{t('assetExtractorPage.cancel')}</Button>
+                    <Button onClick={confirmSavePalette} variant="contained" sx={{ background: 'var(--accent-primary)', color: 'var(--text-primary)', fontWeight: 700, textTransform: 'none', '&:hover': { background: 'var(--accent-hover)' } }}>{t('paintPage.savePaletteTitle')}</Button>
                 </DialogActions>
             </Dialog>
 
@@ -1534,15 +1539,15 @@ function Paint() {
                 onClose={() => setDeleteConfirmOpen(false)}
                 PaperProps={{ sx: { background: 'var(--bg-secondary)', border: '1px solid color-mix(in oklab, var(--color-danger) 30%, var(--border))', minWidth: '300px' } }}
             >
-                <DialogTitle sx={{ color: 'var(--color-danger)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Delete Palette?</DialogTitle>
+                <DialogTitle sx={{ color: 'var(--color-danger)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>{t('paintPage.deletePaletteTitle')}</DialogTitle>
                 <DialogContent>
                     <Typography sx={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        Are you sure you want to delete "{paletteToDelete !== null && savedPalettesList[paletteToDelete]?.name}"? This cannot be undone.
+                        {t('paintPage.deletePaletteDesc', { name: paletteToDelete !== null ? savedPalettesList[paletteToDelete]?.name || '' : '' })}
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ padding: '16px 24px' }}>
-                    <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ color: 'var(--text-muted)', textTransform: 'none' }}>Cancel</Button>
-                    <Button onClick={confirmDeletePalette} variant="contained" sx={{ background: 'var(--color-danger)', color: '#fff', fontWeight: 700, textTransform: 'none', '&:hover': { background: 'color-mix(in oklab, var(--color-danger) 85%, black)' } }}>Delete</Button>
+                    <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ color: 'var(--text-muted)', textTransform: 'none' }}>{t('assetExtractorPage.cancel')}</Button>
+                    <Button onClick={confirmDeletePalette} variant="contained" sx={{ background: 'var(--color-danger)', color: '#fff', fontWeight: 700, textTransform: 'none', '&:hover': { background: 'color-mix(in oklab, var(--color-danger) 85%, black)' } }}>{t('paintPage.deletePaletteTitle').replace('?', '')}</Button>
                 </DialogActions>
             </Dialog>
 

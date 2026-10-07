@@ -1,5 +1,6 @@
 import { FolderOpen, X } from 'lucide-react';
 import type { RecentBin } from '@/lib/stores';
+import { useTranslation } from '@/i18n';
 import './binOpenLanding.css';
 
 function relativeTime(iso: string): string {
@@ -37,12 +38,17 @@ export function BinOpenLanding({
     onOpen,
     onOpenRecent,
     onRemoveRecent,
-    title = 'No Bin Loaded',
-    description = 'Drop a .bin here',
-    actionLabel = 'Open Bin',
-    recentTitle = 'Recent Bins',
+    title,
+    description,
+    actionLabel,
+    recentTitle,
     footnote,
 }: BinOpenLandingProps) {
+    const { t } = useTranslation();
+    const finalTitle = title ?? t('binLanding.title');
+    const finalDesc = description ?? t('binLanding.description');
+    const finalActionLabel = actionLabel ?? t('binLanding.actionLabel');
+    const finalRecentTitle = recentTitle ?? t('binLanding.recentTitle');
     return (
         <div className={`bin-open-landing${dragActive ? ' is-dragging' : ''}`}>
             <div className="bin-open-landing__empty">
@@ -52,18 +58,18 @@ export function BinOpenLanding({
                     strokeWidth={1.5}
                     style={{ display: 'block', marginBottom: 16 }}
                 />
-                <div className="bin-open-landing__title">{title}</div>
-                <div className="bin-open-landing__description">{description}</div>
+                <div className="bin-open-landing__title">{finalTitle}</div>
+                <div className="bin-open-landing__description">{finalDesc}</div>
                 <button type="button" className="dl-btn dl-btn--primary" onClick={onOpen} disabled={busy}>
                     <span className="dl-icon"><FolderOpen size={14} /></span>
-                    <span>{actionLabel}</span>
+                    <span>{finalActionLabel}</span>
                 </button>
                 {footnote && <div className="bin-open-landing__footnote">{footnote}</div>}
             </div>
 
             {recentBins.length > 0 && (
-                <section className="bin-open-recent" aria-label={recentTitle}>
-                    <div className="bin-open-recent__heading">{recentTitle}</div>
+                <section className="bin-open-recent" aria-label={finalRecentTitle}>
+                    <div className="bin-open-recent__heading">{finalRecentTitle}</div>
                     <div className="bin-open-recent__list">
                         {recentBins.map((bin) => (
                             <div
@@ -90,7 +96,7 @@ export function BinOpenLanding({
                                         role="button"
                                         tabIndex={0}
                                         className="bin-open-recent__remove"
-                                        title="Remove from recent"
+                                        title={t('common.delete')}
                                         onClick={(event) => {
                                             event.stopPropagation();
                                             onRemoveRecent(bin.path);

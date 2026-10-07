@@ -4,6 +4,7 @@ import { FolderOpen } from 'lucide-react';
 import { log } from '@/lib/util/logger';
 import './bumpath/Bumpath.css';
 import { useFileExplorer } from '@/components/explorer';
+import { useTranslation } from '@/i18n';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { explorerListDir } from '@/lib/api/explorer';
 import CelestiaGuide from './bumpath/components/CelestiaGuide';
@@ -53,6 +54,7 @@ function shortStatus(value: string): string {
 }
 
 export function Bumpath() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const [sourceDirs, setSourceDirs] = useState<string[]>([]);
     const [, setSourceFiles] = useState<Record<string, unknown>>({});
@@ -698,15 +700,15 @@ export function Bumpath() {
                                 strokeWidth={1.5}
                                 style={{ display: 'block', marginBottom: 16 }}
                             />
-                            <div className="bumpath-empty__title">No Source Folders</div>
-                            <div className="bumpath-empty__sub">Drop a source folder here, or add one</div>
+                            <div className="bumpath-empty__title">{t('bumpath.noSourceFolders')}</div>
+                            <div className="bumpath-empty__sub">{t('bumpath.dropSourceHere')}</div>
                             <button
                                 type="button"
                                 className="dl-btn dl-btn--primary"
                                 onClick={handleSelectSourceDir}
                             >
                                 <span className="dl-icon"><FolderOpen size={14} /></span>
-                                <span>Add Source Folder</span>
+                                <span>{t('bumpath.addSourceFolder')}</span>
                             </button>
                         </div>
                     </div>
@@ -794,11 +796,11 @@ export function Bumpath() {
                 }}>
                     <div className="dl-modal" onMouseDown={(event) => event.stopPropagation()}>
                         <div className="dl-modal__head">
-                            <h2 className="dl-modal__title">Output folder is not empty</h2>
+                            <h2 className="dl-modal__title">{t('bumpath.outputConflictTitle')}</h2>
                         </div>
                         <div className="dl-modal__body">
                             <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                                Bumpath will merge into this folder and replace files with matching paths. It will not delete unrelated files.
+                                {t('bumpath.outputConflictDesc')}
                             </p>
                             <div className="dl-code" style={{ marginTop: 12, wordBreak: 'break-all' }}>
                                 {outputConflictPath}
@@ -806,10 +808,10 @@ export function Bumpath() {
                         </div>
                         <div className="dl-modal__foot">
                             <button type="button" className="dl-btn dl-btn--secondary" onClick={() => resolveOutputConflict(false)}>
-                                Cancel
+                                {t('bumpath.cancel')}
                             </button>
                             <button type="button" className="dl-btn dl-btn--primary" onClick={() => resolveOutputConflict(true)}>
-                                Merge &amp; Replace
+                                {t('bumpath.mergeAndReplace')}
                             </button>
                         </div>
                     </div>

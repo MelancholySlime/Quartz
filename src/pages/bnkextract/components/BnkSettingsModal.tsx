@@ -1,5 +1,6 @@
 import { Settings, Close } from '@mui/icons-material';
 import type { ExtractFormat } from '../types';
+import { useTranslation } from '@/i18n';
 
 interface Props {
     showSettingsModal: boolean;
@@ -33,6 +34,7 @@ export default function BnkSettingsModal({
     multiSelect,
     setMultiSelect,
 }: Props) {
+    const { t } = useTranslation();
     if (!showSettingsModal) return null;
 
     const sectionLabel: React.CSSProperties = {
@@ -46,14 +48,14 @@ export default function BnkSettingsModal({
             <div className="dl-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
                 <div className="dl-modal__head">
                     <span className="dl-icon" style={{ color: 'var(--accent-primary)' }}><Settings sx={{ fontSize: 20 }} /></span>
-                    <h2 className="dl-modal__title">Extract Settings</h2>
+                    <h2 className="dl-modal__title">{t('soundbanks.settingsModal.title')}</h2>
                     <button className="dl-modal__close" onClick={() => setShowSettingsModal(false)} aria-label="Close">
                         <Close sx={{ fontSize: 18 }} />
                     </button>
                 </div>
 
                 <div className="dl-modal__body">
-                    <p style={sectionLabel}>Export Formats</p>
+                    <p style={sectionLabel}>{t('soundbanks.settingsModal.extractFormats')}</p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                         {FORMATS.map((fmt) => {
                             const desc = fmt.key === 'mp3' ? `Lossy ${mp3Bitrate}kbps` : fmt.desc;
@@ -95,7 +97,7 @@ export default function BnkSettingsModal({
 
                     {extractFormats.has('mp3') && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <p style={sectionLabel}>MP3 Bitrate</p>
+                            <p style={sectionLabel}>{t('soundbanks.settingsModal.mp3Bitrate')}</p>
                             <div style={{ display: 'flex', gap: '0.4rem' }}>
                                 {[64, 128, 192, 256, 320].map((rate) => (
                                     <div
@@ -127,7 +129,7 @@ export default function BnkSettingsModal({
                     <p style={sectionLabel}>General</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', cursor: 'pointer', userSelect: 'none' }}>
-                            <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Autoplay on click</span>
+                            <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{t('soundbanks.settingsModal.autoPlay')}</span>
                             <span className="dl-toggle">
                                 <input type="checkbox" checked={autoPlay} onChange={(e) => setAutoPlay(e.target.checked)} />
                                 <span className="dl-toggle__track" />
@@ -135,7 +137,7 @@ export default function BnkSettingsModal({
                             </span>
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', cursor: 'pointer', userSelect: 'none' }}>
-                            <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Multi-select enabled</span>
+                            <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{t('soundbanks.settingsModal.multiSelect')}</span>
                             <span className="dl-toggle">
                                 <input type="checkbox" checked={multiSelect} onChange={(e) => setMultiSelect(e.target.checked)} />
                                 <span className="dl-toggle__track" />

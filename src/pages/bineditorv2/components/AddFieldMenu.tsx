@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { prettyName, sameKey } from '../model/categories';
 import { ADD_GROUPS, type SchemaEntry } from '../model/emitterSchema';
+import { useTranslation } from '@/i18n';
 
 /* Styled, grouped, filterable "+ Add field" dropdown, ported from
    bineditorV3/components/AddFieldMenu.js. Fixed-position panel anchored to the
@@ -19,7 +20,9 @@ interface PanelPos {
     maxH: number;
 }
 
-export default function AddFieldMenu({ onAdd, present = [], label = '+ Add field' }: AddFieldMenuProps) {
+export default function AddFieldMenu({ onAdd, present = [], label }: AddFieldMenuProps) {
+    const { t } = useTranslation();
+    const btnLabel = label ?? t('binEditor.addFieldBtn');
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState('');
     const [pos, setPos] = useState<PanelPos | null>(null);
@@ -74,7 +77,7 @@ export default function AddFieldMenu({ onAdd, present = [], label = '+ Add field
                 onClick={() => setOpen((o) => !o)}
                 style={{ fontFamily: 'var(--font-mono)' }}
             >
-                {label} ▾
+                {btnLabel} ▾
             </button>
             {open && pos && (
                 <div
@@ -100,7 +103,7 @@ export default function AddFieldMenu({ onAdd, present = [], label = '+ Add field
                         className="dl-input"
                         value={q}
                         onChange={(e) => setQ(e.target.value)}
-                        placeholder="search fields…"
+                        placeholder={t('binEditor.searchFields')}
                         style={{ height: 28, fontSize: 12, marginBottom: 6 }}
                     />
                     {groups.length === 0 && (

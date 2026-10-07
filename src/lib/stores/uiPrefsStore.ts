@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Page } from './navigationStore';
+import type { SupportedLocale } from '@/i18n/types';
 
 /* Pages that can be toggled in Page Visibility, mapped to their Quartz default.
    Paint and Port are included (Quartz exposes them too). */
@@ -125,8 +126,11 @@ interface UiPrefs {
     recentPortDonors: RecentPortDonor[];
     // Audio Splitter: files opened from disk, with the segments marked on each.
     recentAudioFiles: RecentAudioFile[];
+    // Internationalization
+    locale: SupportedLocale;
 
     set: <K extends keyof UiPrefs>(key: K, value: UiPrefs[K]) => void;
+    setLocale: (locale: SupportedLocale) => void;
     setPageVisible: (page: Page, visible: boolean) => void;
     pushRecentBin: (path: string) => void;
     removeRecentBin: (path: string) => void;
@@ -190,7 +194,9 @@ export const useUiPrefsStore = create<UiPrefs>()(
             recentDonorBins: [],
             recentPortDonors: [],
             recentAudioFiles: [],
+            locale: 'en-US' as SupportedLocale,
             set: (key, value) => set({ [key]: value } as Pick<UiPrefs, typeof key>),
+            setLocale: (locale) => set({ locale }),
             setPageVisible: (page, visible) =>
                 set((s) => ({ pageVisibility: { ...s.pageVisibility, [page]: visible } })),
             pushRecentBin: (path) =>

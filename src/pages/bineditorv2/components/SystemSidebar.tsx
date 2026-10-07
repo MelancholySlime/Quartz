@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { EditorSystem } from '@/lib/api/bineditor';
 import { getShortSystemName } from '@/pages/port/utils/nameUtils';
+import { useTranslation } from '@/i18n';
 
 /* Left sidebar: system search + the multi-selectable system list with emitter
    counts and dirty dots. Rows use the shared Settings-rail styling (matches the
@@ -40,6 +41,7 @@ export default function SystemSidebar({
     onToggleSystem,
     onCreateSystem,
 }: SystemSidebarProps) {
+    const { t } = useTranslation();
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return systems;
@@ -58,12 +60,12 @@ export default function SystemSidebar({
                 className="dl-input"
                 value={search}
                 onChange={(e) => onSearch(e.target.value)}
-                placeholder="Search systems…"
+                placeholder={t('binEditor.searchSystems')}
                 style={{ flexShrink: 0 }}
             />
             {onCreateSystem && (
                 <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm bev2-newsystem" onClick={onCreateSystem}>
-                    + New system
+                    {t('binEditor.newSystem')}
                 </button>
             )}
 
@@ -86,19 +88,19 @@ export default function SystemSidebar({
                             {multiBin && (
                                 <span
                                     className="biev2-row__bin"
-                                    title={sys.bin === 0 ? 'Main bin' : `Linked bin ${sys.bin}`}
+                                    title={sys.bin === 0 ? t('binEditor.mainBin') : t('binEditor.linkedBin', { num: sys.bin })}
                                 >
-                                    {sys.bin === 0 ? 'main' : `linked ${sys.bin}`}
+                                    {sys.bin === 0 ? t('binEditor.mainBin') : t('binEditor.linkedBin', { num: sys.bin })}
                                 </span>
                             )}
-                            {dirty && <span className="biev2-row__dot" title="Modified" />}
+                            {dirty && <span className="biev2-row__dot" title={t('binEditor.modified')} />}
                             <span className="biev2-row__count">{sys.emitters.length}</span>
                         </div>
                     );
                 })}
                 {filtered.length === 0 && (
                     <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '8px 2px' }}>
-                        No systems match.
+                        {t('binEditor.noSystemsFound')}
                     </div>
                 )}
             </div>

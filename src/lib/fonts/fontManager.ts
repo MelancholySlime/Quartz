@@ -89,8 +89,8 @@ export function applyFont(name: string) {
     // body and several panels declare their own font-family, so set it on body
     // too (and expose --app-font for components that opt in).
     const stack = !name || name === 'system'
-        ? "'Segoe UI', system-ui, -apple-system, sans-serif"
-        : `"${name}", 'Segoe UI', system-ui, sans-serif`;
+        ? "'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif"
+        : `"${name}", 'Segoe UI', system-ui, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif`;
     root.style.setProperty('--app-font', stack);
     document.body.style.fontFamily = stack;
     // Expose the active family name so font-aware CSS (e.g. Minecraft letter

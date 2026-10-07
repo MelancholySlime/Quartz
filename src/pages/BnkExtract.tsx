@@ -14,6 +14,7 @@ import { Box } from '@mui/material';
 import { ContentCut, ViewStream, VerticalSplit, Undo, Redo, Delete, AutoFixHigh, SportsEsports } from '@mui/icons-material';
 import { pickPath } from '@/components/explorer';
 import { log } from '@/lib/util/logger';
+import { useTranslation } from '@/i18n';
 
 import AutoExtractDialog from './bnkextract/components/AutoExtractDialog';
 import AudioSplitter from './bnkextract/components/AudioSplitter';
@@ -143,6 +144,7 @@ function countNodes(nodes: BnkNode[]): number {
 }
 
 export function BnkExtract() {
+    const { t } = useTranslation();
     // ── Per-pane file inputs ──────────────────────────────────────────────────
     // Each pane (left = Main Bank, right = Reference) owns its own BIN/Audio/Events
     // triple and parses independently into itself via its empty-state load block.
@@ -1442,7 +1444,7 @@ export function BnkExtract() {
                         className="bnk-action-btn"
                         style={{ '--action-color': showAudioSplitter ? 'var(--accent-primary)' : 'var(--text-secondary)' } as React.CSSProperties}
                         onClick={() => { setSplitterInitialFile(null); setShowAudioSplitter(true); }}
-                        title="Audio Splitter - cut audio into segments"
+                        title={t('soundbanks.audioSplitterTip')}
                     >
                         <ContentCut sx={{ fontSize: 18 }} />
                     </button>
@@ -1450,7 +1452,7 @@ export function BnkExtract() {
                         className="bnk-action-btn"
                         style={{ '--action-color': viewMode === 'split' ? 'var(--accent-primary)' : 'var(--text-secondary)' } as React.CSSProperties}
                         onClick={() => setViewMode((prev) => (prev === 'normal' ? 'split' : 'normal'))}
-                        title={viewMode === 'normal' ? 'Switch to Split View' : 'Switch to Single View'}
+                        title={viewMode === 'normal' ? t('soundbanks.switchToSplit') : t('soundbanks.switchToSingle')}
                     >
                         {viewMode === 'normal' ? <ViewStream sx={{ fontSize: 18 }} /> : <VerticalSplit sx={{ fontSize: 18 }} />}
                     </button>
@@ -1458,7 +1460,7 @@ export function BnkExtract() {
                         className="bnk-action-btn"
                         style={{ '--action-color': 'var(--text-secondary)' } as React.CSSProperties}
                         onClick={() => setAutoExtractOpen(true)}
-                        title="Mod Auto-Extract"
+                        title={t('soundbanks.modAutoExtract')}
                     >
                         <AutoFixHigh sx={{ fontSize: 18 }} />
                     </button>
@@ -1466,7 +1468,7 @@ export function BnkExtract() {
                         className="bnk-action-btn"
                         style={{ '--action-color': 'var(--text-secondary)' } as React.CSSProperties}
                         onClick={() => setShowGameBanksModal(true)}
-                        title="Load Banks From Game"
+                        title={t('soundbanks.loadFromGame')}
                     >
                         <SportsEsports sx={{ fontSize: 18 }} />
                     </button>
@@ -1479,7 +1481,7 @@ export function BnkExtract() {
                         className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
                         onClick={handleUndo}
                         disabled={undoStack.length === 0}
-                        title="Undo (Ctrl+Z)"
+                        title={t('soundbanks.undo')}
                     >
                         <span className="dl-icon"><Undo sx={{ fontSize: 15 }} /></span>
                     </button>
@@ -1487,7 +1489,7 @@ export function BnkExtract() {
                         className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
                         onClick={handleRedo}
                         disabled={redoStack.length === 0}
-                        title="Redo (Ctrl+Y)"
+                        title={t('soundbanks.redo')}
                     >
                         <span className="dl-icon"><Redo sx={{ fontSize: 15 }} /></span>
                     </button>
@@ -1495,7 +1497,7 @@ export function BnkExtract() {
                         className="bnk-action-btn"
                         style={{ '--action-color': 'var(--color-danger, #e5484d)' } as React.CSSProperties}
                         onClick={() => handleClearPane(viewMode === 'split' ? activePane : 'left')}
-                        title="Clear tree"
+                        title={t('soundbanks.clearTree')}
                     >
                         <Delete sx={{ fontSize: 18 }} />
                     </button>

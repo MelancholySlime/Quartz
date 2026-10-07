@@ -10,6 +10,7 @@ import { PortSystemSkeleton } from './ParticleSystemList/PortSystemSkeleton';
 import { DropOverlay } from '@/components/ui';
 import type { VfxSystem, VfxSystemMap } from '../model';
 import type { ListSharedProps } from './ParticleSystemList/types';
+import { useTranslation } from '@/i18n';
 
 interface DonorColumnProps extends ListSharedProps {
     isProcessing: boolean;
@@ -32,6 +33,7 @@ interface DonorColumnProps extends ListSharedProps {
 }
 
 export default function DonorColumn(props: DonorColumnProps) {
+    const { t } = useTranslation();
     const {
         anmSlot,
         isProcessing,
@@ -63,14 +65,14 @@ export default function DonorColumn(props: DonorColumnProps) {
     return (
         // `minWidth: 0` pins the centre divider; see the note in TargetColumn.
         <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }} {...fileDrop.handlers}>
-            {fileDrop.isOver && <DropOverlay accent="secondary" label="Drop .bin or .py to load as Donor" />}
+            {fileDrop.isOver && <DropOverlay accent="secondary" label={t('port.dropDonorBinOverlay')} />}
             {/* One row: open · search · vfxhub · load-from-game · emitter toggle. */}
             <div className="port-toolbar-row">
                 <button
                     className="dl-btn dl-btn--secondary dl-btn--icon"
                     onClick={handleOpenDonorBin}
                     disabled={isProcessing}
-                    title={isProcessing ? 'Processing...' : 'Open Donor Bin'}
+                    title={isProcessing ? 'Processing...' : t('port.openDonorBin')}
                 >
                     <FolderOpenIcon size={16} />
                 </button>
@@ -82,14 +84,14 @@ export default function DonorColumn(props: DonorColumnProps) {
                 >
                     <SearchInput
                         initialValue={donorFilterInput}
-                        placeholder={anmSlot ? 'Filter by Clip, Anm or Event' : 'Filter by Particle or Emitter'}
+                        placeholder={anmSlot ? t('port.filterAnmDonor') : t('port.filterDonorPlaceholder')}
                         onChange={filterDonorParticles}
                         trailing={
                             <button
                                 type="button"
                                 className={`port-search-scissor${trimDonorNames ? ' is-active' : ''}`}
                                 onClick={() => setTrimDonorNames(!trimDonorNames)}
-                                title={trimDonorNames ? 'Show full donor names' : 'Trim donor names'}
+                                title={trimDonorNames ? t('port.showFullDonorTip') : t('port.trimDonorTip')}
                             >
                                 <ScissorsIcon size={15} />
                             </button>
@@ -97,7 +99,7 @@ export default function DonorColumn(props: DonorColumnProps) {
                     />
                 </div>
                 {/* VFX Hub browse — opens the GitHub collection browser. */}
-                <Tooltip title="Browse VFX Hub">
+                <Tooltip title={t('port.browseVfxHub')}>
                     <span>
                         <button
                             className="dl-btn dl-btn--secondary dl-btn--icon"
@@ -109,7 +111,7 @@ export default function DonorColumn(props: DonorColumnProps) {
                     </span>
                 </Tooltip>
                 {/* Load-from-game stays live even with no bin loaded. */}
-                <Tooltip title="Load donor from game">
+                <Tooltip title={t('port.loadDonorFromGame')}>
                     <span>
                         <button
                             className="dl-btn dl-btn--secondary dl-btn--icon"
@@ -146,11 +148,11 @@ export default function DonorColumn(props: DonorColumnProps) {
                         }}>
                             <FolderOpenIcon size={36} color="var(--accent-primary)" strokeWidth={1.5} />
                             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                                Drag Donor <b style={{ color: 'var(--text-primary)' }}>.bin</b> here
+                                {t('port.dragDonorBin')}
                             </div>
                             <button onClick={handleOpenDonorBin} disabled={isProcessing} className="dl-btn dl-btn--primary dl-btn--sm">
                                 <span className="dl-icon"><FolderOpenIcon size={14} /></span>
-                                <span>Open Bin</span>
+                                <span>{t('port.openBin')}</span>
                             </button>
                         </div>
                         <PortRecentBins slot="donor" onOpen={processDonorBin} />

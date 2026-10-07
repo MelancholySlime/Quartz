@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Youtube, Info as InfoIcon } from 'lucide-react';
 import type { ExtractorChampion, ViewMode } from '../types';
 import { getChampionIconUrl } from '../mediaService';
+import { useTranslation } from '@/i18n';
 
 interface Props {
     searchTerm: string;
@@ -23,11 +24,11 @@ interface Props {
     sidebarWidth?: number;
 }
 
-const CATEGORIES: Array<{ value: ViewMode; label: string }> = [
-    { value: 'champion', label: 'Champions' },
-    { value: 'tft', label: 'TFT' },
-    { value: 'ward', label: 'Wards' },
-    { value: 'emote', label: 'Emotes' },
+const getCategories = (t: any): Array<{ value: ViewMode; label: string }> => [
+    { value: 'champion', label: t('assetExtractorPage.sidebar.champions') },
+    { value: 'tft', label: t('assetExtractorPage.sidebar.tft') },
+    { value: 'ward', label: t('assetExtractorPage.sidebar.wards') },
+    { value: 'emote', label: t('assetExtractorPage.sidebar.emotes') },
 ];
 
 export function ChampionSidebar({
@@ -49,9 +50,11 @@ export function ChampionSidebar({
     offlineMode = false,
     sidebarWidth = 256,
 }: Props) {
+    const { t } = useTranslation();
+    const CATEGORIES = getCategories(t);
     const [useSkinlineMode, setUseSkinlineMode] = useState(false);
     const activeValue = useSkinlineMode ? skinlineSearchTerm : searchTerm;
-    const placeholder = useSkinlineMode ? 'Search skinline...' : 'Search champions...';
+    const placeholder = useSkinlineMode ? t('assetExtractorPage.sidebar.searchSkinline') : t('assetExtractorPage.sidebar.searchChampions');
 
     const handleToggleMode = () => {
         setUseSkinlineMode((prev) => {
@@ -112,9 +115,9 @@ export function ChampionSidebar({
                         type="button"
                         onClick={handleToggleMode}
                         className="dl-btn dl-btn--sm"
-                        title={useSkinlineMode ? 'Skinline mode' : 'Champion mode'}
+                        title={useSkinlineMode ? t('assetExtractorPage.sidebar.skinlineMode') : t('assetExtractorPage.sidebar.championMode')}
                     >
-                        {useSkinlineMode ? 'Skinline' : 'Champion'}
+                        {useSkinlineMode ? t('assetExtractorPage.sidebar.skinline') : t('assetExtractorPage.sidebar.champion')}
                     </button>
                 </div>
             </div>
@@ -125,7 +128,7 @@ export function ChampionSidebar({
                     className="dl-btn dl-btn--ghost dl-btn--sm"
                     style={{ marginBottom: 12 }}
                 >
-                    Clear skinline search
+                    {t('assetExtractorPage.sidebar.clearSkinlineSearch')}
                 </button>
             )}
 
@@ -163,7 +166,7 @@ export function ChampionSidebar({
                                     e.stopPropagation();
                                     onYouTubeChampion?.(champion);
                                 }}
-                                title={`Search ${champion.name} skins on YouTube`}
+                                title={t('assetExtractorPage.sidebar.searchYoutube', { name: champion.name })}
                                 className="ae-sb__yt"
                             >
                                 <Youtube size={14} />

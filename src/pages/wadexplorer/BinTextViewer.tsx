@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { ChevronsDownUp, ChevronsUpDown, Search } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
 import {
@@ -111,6 +112,7 @@ const extensions: Extension[] = [
  *  toolbar, so the preview panel shows one bar instead of a separate actions
  *  row stacked above it. */
 export function BinTextViewer({ content, actions }: { content: string; actions?: ReactNode }) {
+    const { t } = useTranslation();
     const hostRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
@@ -154,14 +156,14 @@ export function BinTextViewer({ content, actions }: { content: string; actions?:
                 {actions}
                 {actions && <span className="wad-bin-viewer__sep" />}
                 <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={run(foldAll)}>
-                    <ChevronsDownUp size={13} /> Collapse All
+                    <ChevronsDownUp size={13} /> {t('wadExplorerPage.preview.collapseAll')}
                 </button>
                 <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={run(unfoldAll)}>
-                    <ChevronsUpDown size={13} /> Expand All
+                    <ChevronsUpDown size={13} /> {t('wadExplorerPage.preview.expandAll')}
                 </button>
                 <span />
                 <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={run(openSearchPanel)}>
-                    <Search size={13} /> Find
+                    <Search size={13} /> {t('wadExplorerPage.preview.find')}
                 </button>
             </div>
             <div className="wad-bin-viewer__editor" ref={hostRef} />

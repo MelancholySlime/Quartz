@@ -1,15 +1,16 @@
 import { useEffect, useRef, Fragment } from 'react';
 import { ExternalLink, ArrowRight, Github } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useTranslation } from '@/i18n';
 
 const GROUPS = [
     [
-        { icon: ExternalLink, label: 'Website', url: 'https://divineskins.gg' },
-        { icon: ArrowRight, label: 'Wiki', url: 'https://wiki.divineskins.gg' },
+        { icon: ExternalLink, key: 'community.website', fallback: 'Website', url: 'https://divineskins.gg' },
+        { icon: ArrowRight, key: 'community.wiki', fallback: 'Wiki', url: 'https://wiki.divineskins.gg' },
     ],
     [
-        { icon: Github, label: 'Quartz on GitHub', url: 'https://github.com/LeagueToolkit/Quartz' },
-        { icon: Github, label: 'RitoShark on GitHub', url: 'https://github.com/RitoShark' },
+        { icon: Github, key: 'community.quartzGithub', fallback: 'Quartz on GitHub', url: 'https://github.com/LeagueToolkit/Quartz' },
+        { icon: Github, key: 'community.ritosharkGithub', fallback: 'RitoShark on GitHub', url: 'https://github.com/RitoShark' },
     ],
 ];
 
@@ -25,6 +26,7 @@ interface CommunityPopoverProps {
 /** Titlebar globe menu — the app's external destinations (Website, Wiki).
     Anchored under the globe button; closes on outside click or Escape. */
 export function CommunityPopover({ anchorRect, onClose }: CommunityPopoverProps) {
+    const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -54,14 +56,14 @@ export function CommunityPopover({ anchorRect, onClose }: CommunityPopoverProps)
                         const Icon = item.icon;
                         return (
                             <button
-                                key={item.label}
+                                key={item.key}
                                 type="button"
                                 role="menuitem"
                                 className="q-community-pop__item"
                                 onClick={() => { onClose(); openExternal(item.url); }}
                             >
                                 <Icon size={16} className="q-community-pop__icon" />
-                                <span>{item.label}</span>
+                                <span>{t(item.key) || item.fallback}</span>
                             </button>
                         );
                     })}

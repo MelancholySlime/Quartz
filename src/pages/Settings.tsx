@@ -8,18 +8,18 @@ import { WindowsIntegrationSection } from '@/components/settings/sections/Window
 import { PageVisibilitySection } from '@/components/settings/sections/PageVisibilitySection';
 import { GitHubSection } from '@/components/settings/sections/GitHubSection';
 import { DevSection } from '@/components/settings/sections/DevSection';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 type SectionId = 'general' | 'appearance' | 'tools' | 'windowsIntegration' | 'pages' | 'github' | 'dev';
 
-// The Dev section is only surfaced in development builds.
-const SECTIONS: { id: SectionId; name: string; icon: LucideIcon }[] = [
-    { id: 'general', name: 'General', icon: SettingsIcon },
-    { id: 'appearance', name: 'Appearance', icon: Palette },
-    { id: 'tools', name: 'External Tools', icon: Terminal },
-    { id: 'windowsIntegration', name: 'Windows Integration', icon: HardDrive },
-    { id: 'pages', name: 'Page Visibility', icon: Eye },
-    { id: 'github', name: 'GitHub Integration', icon: Github },
-    ...(import.meta.env.DEV ? [{ id: 'dev' as const, name: 'Dev', icon: FlaskConical }] : []),
+const SECTION_DEFS: { id: SectionId; key: TranslationKey; fallback: string; icon: LucideIcon }[] = [
+    { id: 'general', key: 'settings.sections.general', fallback: 'General', icon: SettingsIcon },
+    { id: 'appearance', key: 'settings.sections.appearance', fallback: 'Appearance', icon: Palette },
+    { id: 'tools', key: 'settings.sections.tools', fallback: 'External Tools', icon: Terminal },
+    { id: 'windowsIntegration', key: 'settings.sections.windowsIntegration', fallback: 'Windows Integration', icon: HardDrive },
+    { id: 'pages', key: 'settings.sections.pages', fallback: 'Page Visibility', icon: Eye },
+    { id: 'github', key: 'settings.sections.github', fallback: 'GitHub Integration', icon: Github },
+    ...(import.meta.env.DEV ? [{ id: 'dev' as const, key: 'settings.sections.dev' as TranslationKey, fallback: 'Dev', icon: FlaskConical }] : []),
 ];
 
 function SectionContent({ id }: { id: SectionId }) {
@@ -35,6 +35,7 @@ function SectionContent({ id }: { id: SectionId }) {
 }
 
 export function Settings() {
+    const { t } = useTranslation();
     const target = useNavigationStore((s) => s.settingsTarget);
     const [selected, setSelected] = useState<SectionId>(
         (target?.section as SectionId) ?? 'general',
@@ -53,8 +54,9 @@ export function Settings() {
                 {/* Section sidebar — Celestial-style rail: brand-tinted active state with
                    inset accent edge + glow, subtle hover lift on inactive items. */}
                 <div style={{ width: '240px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {SECTIONS.map(({ id, name, icon: Icon }) => {
+                    {SECTION_DEFS.map(({ id, key, fallback, icon: Icon }) => {
                         const active = selected === id;
+                        const label = t(key) || fallback;
                         return (
                             <button
                                 key={id}
@@ -95,7 +97,7 @@ export function Settings() {
                                 }}
                             >
                                 <Icon size={16} style={{ flexShrink: 0 }} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
                             </button>
                         );
                     })}

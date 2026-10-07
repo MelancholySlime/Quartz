@@ -1,5 +1,6 @@
 import React from 'react';
 import { AutoFixHigh as AutoFixHighIcon, Tune as TuneIcon, Close as CloseIcon } from '@mui/icons-material';
+import { useTranslation } from '@/i18n';
 
 interface SourceAddModeModalProps {
     open: boolean;
@@ -16,13 +17,14 @@ const SourceAddModeModal = React.memo(function SourceAddModeModal({
     onNormal,
     onClose,
 }: SourceAddModeModalProps) {
+    const { t } = useTranslation();
     if (!open) return null;
 
     return (
         <div className="dl-modal-backdrop" onClick={onClose}>
             <div className="dl-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="dl-modal__head">
-                    <h2 className="dl-modal__title">Source Folder Added</h2>
+                    <h2 className="dl-modal__title">{t('bumpath.sourceAddedTitle')}</h2>
                     <button type="button" className="dl-modal__close" onClick={onClose} title="Close">
                         <span className="dl-icon"><CloseIcon /></span>
                     </button>
@@ -30,7 +32,7 @@ const SourceAddModeModal = React.memo(function SourceAddModeModal({
 
                 <div className="dl-modal__body">
                     <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-                        Choose your workflow for this source folder.
+                        {t('bumpath.chooseWorkflow')}
                     </p>
                     {sourceDirLabel && (
                         <div
@@ -51,11 +53,11 @@ const SourceAddModeModal = React.memo(function SourceAddModeModal({
                 <div className="dl-modal__foot">
                     <button type="button" className="dl-btn dl-btn--primary" onClick={onQuick}>
                         <span className="dl-icon"><AutoFixHighIcon /></span>
-                        <span>Quick Repath (Recommended)</span>
+                        <span>{t('bumpath.quickRepathRecommended')}</span>
                     </button>
                     <button type="button" className="dl-btn dl-btn--secondary" onClick={onNormal}>
                         <span className="dl-icon"><TuneIcon /></span>
-                        <span>Normal Repath</span>
+                        <span>{t('bumpath.normalRepath')}</span>
                     </button>
                 </div>
             </div>

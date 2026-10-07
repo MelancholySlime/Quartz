@@ -25,6 +25,7 @@ import { ModelInspectHost } from '@/components/model-inspect/ModelInspectHost';
 import { PaintLaunchHost } from '@/components/paint-launch/PaintLaunchHost';
 import { openModelInspect } from '@/lib/model/modelInspectEvent';
 import { UpdateShowcase } from '@/components/update/UpdateShowcase';
+import { t } from '@/i18n';
 
 const TITLES: Record<Page, string> = {
     home: 'Home',
@@ -71,7 +72,7 @@ function PageView({ page }: { page: Page }) {
         case 'bumpath': return <Bumpath />;
         case 'tools': return <Tools />;
         case 'upscale': return <Upscale />;
-        default: return <Placeholder title={TITLES[page]} />;
+        default: return <Placeholder title={t(`nav.${page}` as any) || TITLES[page]} />;
     }
 }
 

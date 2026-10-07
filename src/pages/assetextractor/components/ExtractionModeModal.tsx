@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Info as InfoIcon, X as CloseIcon, Check } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 
 export interface ExtractionDecision {
     skinKey: string;
@@ -75,6 +76,7 @@ export function ExtractionModeModal({
     onDecide,
     onCancel,
 }: Props) {
+    const { t } = useTranslation();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [decisions, setDecisions] = useState<ExtractionDecision[]>([]);
     const [extractVoiceover, setExtractVoiceover] = useState(false);
@@ -190,7 +192,7 @@ export function ExtractionModeModal({
             <div className="dl-modal">
                 <div className="dl-modal__head">
                     <h3 className="dl-modal__title">
-                        {multiSkin ? `Extraction Skin ${currentIndex + 1} of ${total}` : 'Extraction Mode'}
+                        {multiSkin ? t('assetExtractorPage.modal.extractionSkinProgress', { current: currentIndex + 1, total }) : t('assetExtractorPage.extractionMode')}
                     </h3>
                     <button className="dl-btn dl-btn--icon dl-btn--ghost dl-btn--sm" onClick={() => setInfoOpen(!infoOpen)} title="Help Info">
                         <span className="dl-icon"><InfoIcon size={15} /></span>
@@ -204,10 +206,10 @@ export function ExtractionModeModal({
                     {infoOpen && (
                         <div style={{ padding: 12, borderRadius: 10, background: 'var(--bg-tertiary)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                             <div style={{ marginBottom: 6 }}>
-                                <strong style={{ color: 'var(--accent-primary)' }}>Whole WAD:</strong> Extracts everything as-is. Best for finding missing assets.
+                                <strong style={{ color: 'var(--accent-primary)' }}>{t('assetExtractorPage.modal.helpInfoTitle')}</strong> {t('assetExtractorPage.modal.helpInfoDesc')}
                             </div>
                             <div>
-                                <strong style={{ color: 'var(--accent-primary)' }}>Skin Files Only:</strong> Only extracts models and skins (recommended).
+                                <strong style={{ color: 'var(--accent-primary)' }}>{t('assetExtractorPage.modal.helpInfoSkinTitle')}</strong> {t('assetExtractorPage.modal.helpInfoSkinDesc')}
                             </div>
                         </div>
                     )}
@@ -215,33 +217,33 @@ export function ExtractionModeModal({
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{current.championName} — {current.skinName}</p>
 
                     <div style={sectionStyle}>
-                        <h4 style={sectionTitle}>Options</h4>
+                        <h4 style={sectionTitle}>{t('assetExtractorPage.modal.options')}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {multiSkin && (
-                                <DlCheck checked={applyToAll} onChange={setApplyToAll} label="Apply mode to all remaining skins" />
+                                <DlCheck checked={applyToAll} onChange={setApplyToAll} label={t('assetExtractorPage.modal.applyToAll')} />
                             )}
-                            <DlCheck checked={extractVoiceover} onChange={setExtractVoiceover} label="Extract Voiceover" />
-                            <DlCheck checked={skipSfx} onChange={setSkipSfx} label="Skip SFX export" />
+                            <DlCheck checked={extractVoiceover} onChange={setExtractVoiceover} label={t('assetExtractorPage.modal.extractVoiceover')} />
+                            <DlCheck checked={skipSfx} onChange={setSkipSfx} label={t('assetExtractorPage.modal.skipSfx')} />
 
                             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                                    Skin Files Only
+                                    {t('assetExtractorPage.modal.skinFilesOnly')}
                                 </div>
-                                <DlCheck checked={preserveHudIcons2D} onChange={setPreserveHudIcons2D} label="Preserve HUD ability icons" />
-                                <DlCheck checked={consolidateAssets} onChange={setConsolidateAssets} label="Consolidate VFX assets into per-skin folders" />
-                                <DlCheck checked={splitVfx} onChange={setSplitVfx} label="Split VFX into a separate bin" />
-                                <DlCheck checked={splitAnm} onChange={setSplitAnm} label="Split animations into a separate bin" />
+                                <DlCheck checked={preserveHudIcons2D} onChange={setPreserveHudIcons2D} label={t('assetExtractorPage.modal.preserveHud')} />
+                                <DlCheck checked={consolidateAssets} onChange={setConsolidateAssets} label={t('assetExtractorPage.modal.consolidateVfx')} />
+                                <DlCheck checked={splitVfx} onChange={setSplitVfx} label={t('assetExtractorPage.modal.splitVfx')} />
+                                <DlCheck checked={splitAnm} onChange={setSplitAnm} label={t('assetExtractorPage.modal.splitAnm')} />
                             </div>
 
                             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 8 }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                                    Output
+                                    {t('assetExtractorPage.modal.output')}
                                 </div>
-                                <DlCheck checked={outputOverrideEnabled} onChange={setOutputOverrideEnabled} label="Override Output Path" />
+                                <DlCheck checked={outputOverrideEnabled} onChange={setOutputOverrideEnabled} label={t('assetExtractorPage.modal.overrideOutput')} />
                             </div>
                             {outputOverrideEnabled && multiSkin && (
                                 <div style={{ marginLeft: 20 }}>
-                                    <DlCheck checked={outputKeepForAll} onChange={setOutputKeepForAll} label="Keep same output path for all selected skins" />
+                                    <DlCheck checked={outputKeepForAll} onChange={setOutputKeepForAll} label={t('assetExtractorPage.modal.keepSameOutput')} />
                                 </div>
                             )}
                             {outputOverrideEnabled && (
@@ -261,7 +263,7 @@ export function ExtractionModeModal({
                                             if (picked) setOutputPath(String(picked));
                                         }}
                                     >
-                                        Browse
+                                        {t('assetExtractorPage.modal.browse')}
                                     </button>
                                     {recentOutputPaths.length > 0 && (
                                         <datalist id="ae-recent-paths-extract">
@@ -283,7 +285,7 @@ export function ExtractionModeModal({
                                     htmlFor="ae-folder-name"
                                     style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}
                                 >
-                                    Folder name {multiSkin && <span>(single skin only)</span>}
+                                    {t('assetExtractorPage.modal.folderName')} {multiSkin && <span>{t('assetExtractorPage.modal.singleSkinOnly')}</span>}
                                 </label>
                                 <input
                                     id="ae-folder-name"
@@ -291,7 +293,7 @@ export function ExtractionModeModal({
                                     value={folderName}
                                     disabled={multiSkin}
                                     onChange={(e) => setFolderName(e.target.value)}
-                                    placeholder={multiSkin ? 'Auto-named per skin' : defaultFolderName || 'e.g. my-aurora-mod'}
+                                    placeholder={multiSkin ? t('assetExtractorPage.modal.autoNamed') : defaultFolderName || 'e.g. my-aurora-mod'}
                                 />
                             </div>
                         </div>
@@ -299,8 +301,8 @@ export function ExtractionModeModal({
                 </div>
 
                 <div className="dl-modal__foot">
-                    <button className="dl-btn dl-btn--secondary" onClick={() => handleDecision(false)}>Whole WAD</button>
-                    <button className="dl-btn dl-btn--primary" onClick={() => handleDecision(true)}>Skin Files Only</button>
+                    <button className="dl-btn dl-btn--secondary" onClick={() => handleDecision(false)}>{t('assetExtractorPage.modal.wholeWad')}</button>
+                    <button className="dl-btn dl-btn--primary" onClick={() => handleDecision(true)}>{t('assetExtractorPage.modal.skinFilesOnly')}</button>
                 </div>
             </div>
         </div>,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Download, Eye, FileCode2, Image, Info, X } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import {
     wadExplorerPrepareModel, wadExplorerText, wadExplorerTexture,
     type WadPreparedPreview,
@@ -197,6 +198,7 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const { t } = useTranslation();
     const allFiles = useMemo(() => runtime.tree ? flattenFiles(runtime.tree, []) : [], [runtime.tree]);
     const companions = useMemo(
         () => node.kind === 'file' && MODEL_EXTENSIONS.has(node.extension) ? selectModelCompanions(node, allFiles) : null,
@@ -211,7 +213,7 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
 
         const run = async () => {
             if (node.size > PREVIEW_LIMIT && !MODEL_EXTENSIONS.has(node.extension) && !IMAGE_EXTENSIONS.has(node.extension)) {
-                setError(`Preview skipped because this file is ${formatBytes(node.size)}. Extract it to inspect the full payload.`);
+                setError(t('wadExplorerPage.preview.skipped', { size: formatBytes(node.size) }));
                 return;
             }
             setLoading(true);
@@ -219,7 +221,7 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
                 objectUrl = pngUrl(await wadExplorerTexture(selected.wad.path, node.pathHash));
                 if (!disposed) setImageUrl(objectUrl);
             } else if (MODEL_EXTENSIONS.has(node.extension)) {
-                if (!companions) throw new Error('No SKN, SCB, or SCO model was found beside this asset.');
+                if (!companions) throw new Error(t('wadExplorerPage.preview.noModel'));
                 const value = await wadExplorerPrepareModel({
                     wadPath: selected.wad.path,
                     files: companions.files.map((file) => ({ pathHash: file.pathHash, path: file.path })),
@@ -245,9 +247,10 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
         const textures = previewNode.children.filter(
             (child): child is WadFileNode => child.kind === 'file' && IMAGE_EXTENSIONS.has(child.extension),
         );
+        const subtitle = textures.length === 1 ? t('wadExplorerPage.preview.texturesCount', { count: textures.length }) : t('wadExplorerPage.preview.texturesCountPlural', { count: textures.length });
         return (
             <section className="wad-preview">
-                <PreviewHeader icon={<FolderOpenIcon />} title={node.name} subtitle={`${textures.length} previewable texture${textures.length === 1 ? '' : 's'}`} onClose={onClose} />
+                <PreviewHeader icon={<FolderOpenIcon />} title={node.name} subtitle={subtitle} onClose={onClose} />
                 <div className="wad-preview__content"><TextureGallery files={textures} wadPath={selected.wad.path} /></div>
             </section>
         );
@@ -266,12 +269,12 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
                 (see below) so the panel doesn't stack three separate bars. */}
             {!(binLike && text !== null) && (
                 <div className="wad-preview__actions">
-                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => onExtract(node)}><Download size={13} /> Extract</button>
-                    {prepared && <button className="dl-btn dl-btn--sm dl-btn--primary" onClick={() => openModelInspect(prepared.primaryPath, prepared.texturePath, prepared.texturePaths, prepared.hiddenSubmeshes, prepared.modelScale, undefined, prepared.anmPaths, prepared.anmClips)}><Eye size={13} /> Full Model Viewer</button>}
+                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => onExtract(node)}><Download size={13} /> {t('wadExplorerPage.preview.extract')}</button>
+                    {prepared && <button className="dl-btn dl-btn--sm dl-btn--primary" onClick={() => openModelInspect(prepared.primaryPath, prepared.texturePath, prepared.texturePaths, prepared.hiddenSubmeshes, prepared.modelScale, undefined, prepared.anmPaths, prepared.anmClips)}><Eye size={13} /> {t('wadExplorerPage.preview.fullModelViewer')}</button>}
                 </div>
             )}
             <div className="wad-preview__content">
-                {loading && <Loading label={MODEL_EXTENSIONS.has(node.extension) ? 'Preparing model assets…' : 'Reading preview…'} />}
+                {loading && <Loading label={MODEL_EXTENSIONS.has(node.extension) ? t('wadExplorerPage.preview.preparingModel') : t('wadExplorerPage.preview.readingPreview')} />}
                 {error && <div className="wad-preview__error">{error}</div>}
                 {!loading && prepared && (
                     <div className="wad-preview__model">
@@ -294,11 +297,11 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
                         actions={
                             <>
                                 <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={() => onExtract(node)}>
-                                    <Download size={13} /> Extract
+                                    <Download size={13} /> {t('wadExplorerPage.preview.extract')}
                                 </button>
                                 {binLike && (
                                     <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={() => onOpenInJade(node)}>
-                                        <img src="/jade.webp" alt="" className="wad-preview__jade-icon" /> Open in Jade
+                                        <img src="/jade.webp" alt="" className="wad-preview__jade-icon" /> {t('wadExplorerPage.preview.openInJade')}
                                     </button>
                                 )}
                             </>
@@ -306,25 +309,26 @@ export function WadPreview({ selected, runtime, onClose, onOpenInJade, onExtract
                     />
                 )}
                 {!loading && !error && !prepared && !imageUrl && text === null && (
-                    <div className="wad-preview__state"><Info size={24} />No inline renderer for this file type.</div>
+                    <div className="wad-preview__state"><Info size={24} />{t('wadExplorerPage.preview.noInlineRenderer')}</div>
                 )}
             </div>
             <footer className="wad-preview__meta">
-                <span><b>Hash</b>{node.pathHash}</span>
-                <span><b>Size</b>{formatBytes(node.size)}</span>
-                <span><b>Stored</b>{formatBytes(node.compressedSize)}</span>
-                <span><b>Compression</b>{node.type}</span>
+                <span><b>{t('wadExplorerPage.preview.hash')}</b>{node.pathHash}</span>
+                <span><b>{t('wadExplorerPage.preview.size')}</b>{formatBytes(node.size)}</span>
+                <span><b>{t('wadExplorerPage.preview.stored')}</b>{formatBytes(node.compressedSize)}</span>
+                <span><b>{t('wadExplorerPage.preview.compression')}</b>{node.type}</span>
             </footer>
         </section>
     );
 }
 
 function PreviewHeader({ icon, title, subtitle, onClose }: { icon: React.ReactNode; title: string; subtitle: string; onClose: () => void }) {
+    const { t } = useTranslation();
     return (
         <header className="wad-preview__header">
             <span className="wad-preview__mark">{icon}</span>
             <div><strong>{title}</strong><span title={subtitle}>{subtitle}</span></div>
-            <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--ghost" title="Close preview" onClick={onClose}><X size={15} /></button>
+            <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--ghost" title={t('wadExplorerPage.preview.closePreview')} onClick={onClose}><X size={15} /></button>
         </header>
     );
 }

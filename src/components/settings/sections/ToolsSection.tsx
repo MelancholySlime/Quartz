@@ -10,8 +10,10 @@ import {
 } from '@/lib/api';
 import { log } from '@/lib/util/logger';
 import { useFileExplorer } from '@/components/explorer';
+import { useTranslation } from '@/i18n';
 
 export function ToolsSection() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const jadePath = useUiPrefsStore((s) => s.jadeExecutablePath);
     const set = useUiPrefsStore((s) => s.set);
@@ -68,18 +70,18 @@ export function ToolsSection() {
     useEffect(() => { refreshHashes(); }, []);
 
     const autoDetect = async () => {
-        setDetectStatus('loading'); setDetectMessage('Scanning…');
+        setDetectStatus('loading'); setDetectMessage(t('settings.tools.scanning'));
         try {
             const detected = await getLeaguePath();
             if (detected) {
                 await update({ leaguePath: detected });
-                setDetectStatus('success'); setDetectMessage('Found!');
+                setDetectStatus('success'); setDetectMessage(t('settings.tools.found'));
             } else {
-                setDetectStatus('error'); setDetectMessage('Could not find League folder');
+                setDetectStatus('error'); setDetectMessage(t('settings.tools.notFound'));
             }
         } catch (e) {
             log.error('autoDetectLeaguePath', e);
-            setDetectStatus('error'); setDetectMessage('Detection failed');
+            setDetectStatus('error'); setDetectMessage(t('settings.tools.detectionFailed'));
         }
         setTimeout(() => { setDetectStatus(null); setDetectMessage(''); }, 3000);
     };
@@ -114,9 +116,10 @@ export function ToolsSection() {
         setDownloading(true); setHashMessage(null);
         try {
             const r = await downloadHashes(false);
-            setHashMessage(`${r.downloaded} downloaded, ${r.skipped} up to date${r.errors ? `, ${r.errors} failed` : ''}.`);
+            const errStr = r.errors ? `, ${r.errors} failed` : '';
+            setHashMessage(t('settings.tools.downloadSummary', { downloaded: r.downloaded, skipped: r.skipped, errors: errStr }));
             await refreshHashes();
-        } catch (e) { log.error('downloadHashes', e); setHashMessage('Download failed.'); }
+        } catch (e) { log.error('downloadHashes', e); setHashMessage(t('settings.tools.downloadFailed')); }
         finally { setDownloading(false); }
     };
 
@@ -126,83 +129,76 @@ export function ToolsSection() {
 
     const hashCountLabel = hashStatus
         ? hashStatus.present
-            ? `Hash databases present (~${hashStatus.loadedCount.toLocaleString()} entries)`
-            : 'Hash databases not downloaded yet'
+            ? t('settings.tools.hashDatabasesPresent', { count: hashStatus.loadedCount.toLocaleString() })
+            : t('settings.tools.hashNotDownloaded')
         : '';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <FormGroup label="League Install Path" icon={<FolderTree size={15} />}>
+            <FormGroup label={t('settings.tools.leaguePath')} icon={<FolderTree size={15} />}>
                 <div className="settings-card" style={{ ...cardSurface, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <InputWithButton
                         value={leaguePath}
                         onChange={(e) => update({ leaguePath: e.target.value })}
-                        /* Single backslashes: this is a JSX string, not an escape
-                           sequence, so "\\" would render two of them. */
-                        placeholder="C:\Riot Games\League of Legends"
+                        placeholder={t('settings.tools.leaguePathPlaceholder')}
                         buttonIcon={<FolderOpen size={16} />}
-                        buttonText="Browse"
+                        buttonText={t('common.browse')}
                         onButtonClick={browseLeague}
                     />
-                    {/* The example stays visible whether or not anything is wrong.
-                        Picking the `Game` subfolder is the common mistake, and
-                        showing the shape up front prevents it instead of
-                        correcting it afterwards. */}
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                         Pick the <strong style={{ color: 'var(--text-primary)' }}>League of Legends</strong> folder itself, not the{' '}
                         <code style={{ fontSize: '11px', opacity: 0.85 }}>Game</code> folder inside it.
-                        {' '}Example: <code style={{ fontSize: '11px', color: 'var(--text-primary)' }}>C:\Riot Games\League of Legends</code>
+                        {' '}{t('settings.tools.leaguePathExample')}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <Button icon={<Search size={16} />} variant="secondary" onClick={autoDetect} disabled={detectStatus === 'loading'}>
-                            {detectStatus === 'loading' ? 'Scanning…' : 'Auto Detect'}
+                            {detectStatus === 'loading' ? t('settings.tools.scanning') : t('settings.tools.autoDetect')}
                         </Button>
                         {detectMessage && detectStatus !== 'loading' && (
                             <span style={{ fontSize: '12px', fontWeight: 600, color: statusColor }}>{detectMessage}</span>
                         )}
-                        {/* Only once a path is set: an empty field is not yet wrong. */}
                         {pathCheck && (
                             pathCheck.valid
-                                ? <StatusBadge status="success" text="Valid League folder" />
-                                : <StatusBadge status="warning" text={pathCheck.reason || 'Not a League folder'} />
+                                ? <StatusBadge status="success" text={t('settings.tools.validLeagueFolder')} />
+                                : <StatusBadge status="warning" text={pathCheck.reason || t('settings.tools.notALeagueFolder')} />
                         )}
                     </div>
                 </div>
             </FormGroup>
 
-            <FormGroup label="WAD Extraction Output Path" icon={<PackageOpen size={15} />}>
+            <FormGroup label={t('settings.tools.wadOutputPath')} icon={<PackageOpen size={15} />}>
                 <div className="settings-card" style={{ ...cardSurface, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <InputWithButton
                         value={wadOutputPath}
                         onChange={(e) => update({ wadOutputPath: e.target.value })}
                         placeholder="C:\\Users\\<user>\\Desktop"
                         buttonIcon={<FolderOpen size={16} />}
-                        buttonText="Browse"
+                        buttonText={t('common.browse')}
                         onButtonClick={browseWadOutput}
                     />
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Where the Asset Extractor writes extracted skins. Defaults to your Desktop.
+                        {t('settings.tools.wadOutputPathHint')}
                     </div>
                 </div>
             </FormGroup>
 
-            <FormGroup label="Jade Executable Path" icon={<Terminal size={15} />}>
+            <FormGroup label={t('settings.tools.jadePath')} icon={<Terminal size={15} />}>
                 <div className="settings-card" style={{ ...cardSurface, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <InputWithButton
                         value={jadePath}
                         onChange={(e) => set('jadeExecutablePath', e.target.value)}
                         placeholder="C:\\Users\\<user>\\AppData\\Local\\Jade\\Jade.exe"
                         buttonIcon={<FolderOpen size={16} />}
-                        buttonText="Browse"
+                        buttonText={t('common.browse')}
                         onButtonClick={browseJade}
                     />
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Leave empty to use auto-detection.
+                        {t('settings.tools.jadePathHint')}
                     </div>
                 </div>
             </FormGroup>
 
-            <FormGroup label="Hash Files" icon={<Database size={15} />}>
+            <FormGroup label={t('settings.tools.hashFiles')} icon={<Database size={15} />}>
                 <div className="settings-card" style={{ ...cardSurface, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {hashStatus && (
                         <div>
@@ -212,20 +208,20 @@ export function ToolsSection() {
                             />
                             {hashStatus.lastUpdated && (
                                 <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                                    Updated {new Date(hashStatus.lastUpdated).toLocaleString()}
+                                    {t('settings.tools.updatedAt', { date: new Date(hashStatus.lastUpdated).toLocaleString() })}
                                 </div>
                             )}
                         </div>
                     )}
                     <Button icon={<Download size={16} />} fullWidth variant="secondary" onClick={doDownloadHashes} disabled={downloading}>
-                        {downloading ? 'Downloading...' : 'Download / Update Hashes'}
+                        {downloading ? t('settings.tools.downloading') : t('settings.tools.downloadUpdateHashes')}
                     </Button>
                     {hashMessage && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{hashMessage}</div>}
                 </div>
             </FormGroup>
 
             <div ref={upscaleCardRef} className={flashUpscale ? 'settings-flash' : undefined}>
-                <FormGroup label="AI Upscale Models" icon={<ImageUpscale size={15} />}>
+                <FormGroup label={t('settings.tools.aiUpscaleModels')} icon={<ImageUpscale size={15} />}>
                     <UpscaleCard />
                 </FormGroup>
             </div>
@@ -237,6 +233,7 @@ export function ToolsSection() {
    available in release builds — the AI Image Upscaler links users here when the
    binary isn't installed. */
 function UpscaleCard() {
+    const { t } = useTranslation();
     const [status, setStatus] = useState<UpscaleStatus | null>(null);
     const [busy, setBusy] = useState(false);
     const [pct, setPct] = useState(0);
@@ -254,7 +251,7 @@ function UpscaleCard() {
         });
         try {
             await upscaleDownloadAll();
-            setMessage('Components installed.');
+            setMessage(t('settings.tools.componentsInstalled'));
             await refresh();
         } catch (e) {
             setMessage(`Download failed: ${String((e as Error)?.message || e)}`);
@@ -266,8 +263,8 @@ function UpscaleCard() {
     const allModels = binOk && (status?.models.installed.length ?? 0) === (status?.models.total ?? 0);
     const modelLabel = status
         ? binOk
-            ? `Upscayl ready (${status.models.installed.length}/${status.models.total} models)`
-            : 'Upscayl binary not downloaded yet'
+            ? t('settings.tools.upscaylReady', { installed: status.models.installed.length, total: status.models.total })
+            : t('settings.tools.upscaylNotDownloaded')
         : '';
 
     return (
@@ -280,7 +277,7 @@ function UpscaleCard() {
                 </div>
             )}
             <Button icon={<Download size={16} />} fullWidth variant="secondary" onClick={run} disabled={busy || allModels}>
-                {busy ? `Downloading… ${pct}%` : binOk ? 'Update Components' : 'Download Components (~200MB)'}
+                {busy ? t('settings.tools.downloadingProgress', { percent: pct }) : binOk ? t('settings.tools.updateComponents') : t('settings.tools.downloadComponents')}
             </Button>
             {message && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{message}</div>}
         </div>

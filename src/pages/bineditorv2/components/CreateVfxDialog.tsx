@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BinEditorChildParams, EditorSystem } from '@/lib/api/bineditor';
+import { useTranslation } from '@/i18n';
 
 export type CreateIntent =
     | { kind: 'system' }
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function CreateVfxDialog({ intent, busy, onClose, onSystem, onEmitter, onChild }: Props) {
+    const { t } = useTranslation();
     const [name, setName] = useState('');
     const [effectKey, setEffectKey] = useState('');
     const [rate, setRate] = useState('1');
@@ -33,7 +35,11 @@ export default function CreateVfxDialog({ intent, busy, onClose, onSystem, onEmi
     }, [intent]);
 
     if (!intent) return null;
-    const title = intent.kind === 'system' ? 'New VFX System' : intent.kind === 'emitter' ? 'New Emitter' : 'New Child Particle';
+    const title = intent.kind === 'system'
+        ? t('binEditor.dialogs.createSystemTitle')
+        : intent.kind === 'emitter'
+        ? t('binEditor.dialogs.createEmitterTitle', { system: intent.system.name })
+        : t('binEditor.dialogs.createChildTitle', { system: intent.system.name });
     const submit = () => {
         if (intent.kind === 'system') onSystem(name.trim());
         else if (intent.kind === 'emitter') onEmitter(intent.system, name.trim());
@@ -73,8 +79,8 @@ export default function CreateVfxDialog({ intent, busy, onClose, onSystem, onEmi
                     )}
                 </div>
                 <div className="dl-modal__foot">
-                    <button type="button" className="dl-btn dl-btn--secondary" onClick={onClose}>Cancel</button>
-                    <button type="button" className="dl-btn dl-btn--primary" disabled={busy || invalid} onClick={submit}>Create</button>
+                    <button type="button" className="dl-btn dl-btn--secondary" onClick={onClose}>{t('binEditor.dialogs.cancelBtn')}</button>
+                    <button type="button" className="dl-btn dl-btn--primary" disabled={busy || invalid} onClick={submit}>{busy ? t('binEditor.dialogs.creatingBtn') : t('binEditor.dialogs.createBtn')}</button>
                 </div>
             </div>
         </div>

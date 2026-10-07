@@ -5,18 +5,19 @@ import { Button } from '@/components/settings/primitives';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { toolsFixVfxShape } from '@/lib/api/vfxTools';
 import { log } from '@/lib/util/logger';
+import { useTranslation } from '@/i18n';
 import './tools-cards.css';
 
 interface NotifyArg { message: string; severity: 'info' | 'success' | 'error' | 'warning' }
 
 const basename = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p;
 
-async function pickBinFile(): Promise<string | null> {
-    const r = await pickPath({ mode: 'file', title: 'Select .bin to fix', filters: [{ name: 'BIN Files', extensions: ['bin'] }], recentsKey: 'bin' });
+async function pickBinFile(title: string): Promise<string | null> {
+    const r = await pickPath({ mode: 'file', title, filters: [{ name: 'BIN Files', extensions: ['bin'] }], recentsKey: 'bin' });
     return typeof r === 'string' ? r : null;
 }
-async function pickFolder(): Promise<string | null> {
-    const r = await pickPath({ mode: 'directory', title: 'Select folder (recursively scans for .bin)' });
+async function pickFolder(title: string): Promise<string | null> {
+    const r = await pickPath({ mode: 'directory', title });
     return typeof r === 'string' ? r : null;
 }
 
@@ -28,6 +29,7 @@ interface FixResult {
 }
 
 export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => void }) {
+    const { t } = useTranslation();
     const [targetPath, setTargetPath] = useState('');
     const [createBackup, setCreateBackup] = useState(true);
     const [busy, setBusy] = useState(false);
@@ -36,7 +38,7 @@ export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => voi
     const notify = (message: string, severity: NotifyArg['severity'] = 'info') => onNotify?.({ message, severity });
 
     const handleRun = async () => {
-        if (!targetPath) { notify('Pick a .bin file or a folder first', 'warning'); return; }
+        if (!targetPath) { notify(t('toolsPage.builtIn.fixVfxShape.pickBinOrFolderFirst') || 'Pick a .bin file or a folder first', 'warning'); return; }
         setBusy(true);
         setLastResult(null);
         try {
@@ -49,6 +51,7 @@ export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => voi
                 : basename(targetPath);
             const failed = res.filesFailed > 0 ? ` — ${res.filesFailed} failed` : '';
             notify(
+                t('toolsPage.builtIn.fixVfxShape.fixSuccess', { total, lifted: res.birthTranslationsLifted, where, failed }) ||
                 `Fixed ${total} shape(s), lifted ${res.birthTranslationsLifted} BirthTranslation(s) across ${where}${failed}`,
                 res.filesFailed > 0 ? 'warning' : total > 0 || res.birthTranslationsLifted > 0 ? 'success' : 'info',
             );
@@ -60,22 +63,22 @@ export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => voi
             });
         } catch (e) {
             log.error('bin:fixVfxShape', e);
-            notify(`Fix crashed: ${String((e as Error)?.message || e)}`, 'error');
+            notify(t('toolsPage.builtIn.fixVfxShape.fixCrashed', { error: String((e as Error)?.message || e) }) || `Fix crashed: ${String((e as Error)?.message || e)}`, 'error');
         } finally {
             setBusy(false);
         }
     };
 
-    const pickFile = async () => { const p = await pickBinFile(); if (p) setTargetPath(p); };
-    const pickDir = async () => { const p = await pickFolder(); if (p) setTargetPath(p); };
+    const pickFile = async () => { const p = await pickBinFile(t('toolsPage.builtIn.fixVfxShape.selectBinToFix') || ''); if (p) setTargetPath(p); };
+    const pickDir = async () => { const p = await pickFolder(t('toolsPage.builtIn.fixVfxShape.selectFolder') || ''); if (p) setTargetPath(p); };
 
     return (
         <div className="tc-card">
             <div className="tc-card__head">
                 <div className="tc-card__icon"><Wand2 size={20} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 className="tc-card__title">Fix VFX Shape</h3>
-                    <p className="tc-card__desc">Rewrites legacy Shape pointers (and lifts BirthTranslation) in VfxEmitterDefinitionData. Accepts a single .bin or a folder (recurses for .bin files). Ports ltmao&apos;s FixVfxShape script.</p>
+                    <h3 className="tc-card__title">{t('toolsPage.builtIn.fixVfxShape.title')}</h3>
+                    <p className="tc-card__desc">{t('toolsPage.builtIn.fixVfxShape.desc')}</p>
                 </div>
             </div>
 
@@ -83,18 +86,18 @@ export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => voi
                 <div className="tc-picker">
                     <input
                         className="dl-input"
-                        placeholder="Paste a .bin file OR folder path — or use the pickers →"
+                        placeholder={t('toolsPage.builtIn.fixVfxShape.pastePlaceholder') || ''}
                         value={targetPath}
                         onChange={(e) => setTargetPath(e.target.value)}
                     />
-                    <button className="tc-iconbtn" title="Browse for .bin" onClick={pickFile}><FileIcon size={16} /></button>
-                    <button className="tc-iconbtn" title="Browse for folder (recursive)" onClick={pickDir}><FolderIcon size={16} /></button>
-                    {targetPath && <button className="tc-iconbtn tc-iconbtn--danger" title="Clear" onClick={() => setTargetPath('')}><X size={16} /></button>}
+                    <button className="tc-iconbtn" title={t('toolsPage.builtIn.fixVfxShape.selectBinToFix') || ''} onClick={pickFile}><FileIcon size={16} /></button>
+                    <button className="tc-iconbtn" title={t('toolsPage.builtIn.fixVfxShape.selectFolder') || ''} onClick={pickDir}><FolderIcon size={16} /></button>
+                    {targetPath && <button className="tc-iconbtn tc-iconbtn--danger" title={t('common.reset') || 'Clear'} onClick={() => setTargetPath('')}><X size={16} /></button>}
                 </div>
 
                 <div className="tc-foot">
                     <div className="tc-foot__opts">
-                        <Checkbox label="Create .bak backup before write" checked={createBackup} onChange={setCreateBackup} />
+                        <Checkbox label={t('toolsPage.builtIn.fixVfxShape.createBackup') || 'Create .bak backup before write'} checked={createBackup} onChange={setCreateBackup} />
                     </div>
                     <div className="tc-foot__spacer" />
                     {lastResult && (
@@ -104,7 +107,7 @@ export function FixVfxShapeCard({ onNotify }: { onNotify?: (a: NotifyArg) => voi
                     )}
                     <div className="tc-foot__run">
                         <Button icon={<Play size={16} />} variant="primary" disabled={busy || !targetPath} onClick={handleRun}>
-                            {busy ? 'Fixing…' : 'Run Fix'}
+                            {busy ? t('toolsPage.builtIn.fixVfxShape.fixing') : t('toolsPage.builtIn.fixVfxShape.runFix')}
                         </Button>
                     </div>
                 </div>

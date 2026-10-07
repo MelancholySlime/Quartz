@@ -3,6 +3,7 @@ import { Box, List, ListItem, Typography } from '@mui/material';
 import { FormatListBulleted as FormatListBulletedIcon, Search as SearchIcon, Check as CheckIcon } from '@mui/icons-material';
 import DebouncedTextField from './DebouncedTextField';
 import type { SourceBin } from '../utils/types';
+import { useTranslation } from '@/i18n';
 
 interface SourceBinsPanelProps {
     binFilter: string;
@@ -25,6 +26,7 @@ const SourceBinsPanel = React.memo(function SourceBinsPanel({
     handleBinSelect,
     handleBinView,
 }: SourceBinsPanelProps) {
+    const { t } = useTranslation();
     return (
         <Box
             sx={{
@@ -40,11 +42,11 @@ const SourceBinsPanel = React.memo(function SourceBinsPanel({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <FormatListBulletedIcon sx={{ color: 'var(--accent-primary)', fontSize: '1.2rem' }} />
                             <Typography variant="h6" sx={{ color: 'var(--accent-primary)', fontSize: '1rem' }}>
-                                Source BINs:
+                                {t('bumpath.sourceBins')}
                             </Typography>
                         </Box>
                         <span className="dl-badge">
-                            {selectedBinCount} / {totalBinCount} selected
+                            {t('bumpath.selectedCount', { selected: selectedBinCount, total: totalBinCount })}
                         </span>
                     </Box>
 
@@ -52,7 +54,7 @@ const SourceBinsPanel = React.memo(function SourceBinsPanel({
                         <div className="dl-search" style={{ flex: 1 }}>
                             <span className="dl-icon"><SearchIcon sx={{ fontSize: '1rem' }} /></span>
                             <DebouncedTextField
-                                placeholder="Filter BIN files..."
+                                placeholder={t('bumpath.filterBinsPlaceholder')}
                                 value={binFilter}
                                 onValueChange={setBinFilter}
                                 debounceMs={150}
@@ -63,7 +65,7 @@ const SourceBinsPanel = React.memo(function SourceBinsPanel({
                                 type="button"
                                 className="dl-btn dl-btn--icon dl-btn--sm dl-btn--secondary"
                                 onClick={() => setBinFilter('')}
-                                title="Clear filter"
+                                title={t('bumpath.clearFilter')}
                             >
                                 <span className="dl-icon">✕</span>
                             </button>
@@ -72,7 +74,7 @@ const SourceBinsPanel = React.memo(function SourceBinsPanel({
 
                     {binFilter && (
                         <Typography variant="body2" sx={{ color: 'var(--text-secondary)', fontSize: '0.7rem', mt: 0.5 }}>
-                            Showing {filteredBins.length} of {totalBinCount} BINs
+                            {t('bumpath.showingBinsCount', { filtered: filteredBins.length, total: totalBinCount })}
                         </Typography>
                     )}
                 </Box>

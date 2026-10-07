@@ -25,6 +25,7 @@ import {
     flattenFiles, wadDisplayName,
 } from './wadexplorer/tree';
 import type { SelectedWadNode, WadFileNode, WadNode, WadRuntimeState, WadTreeRow } from './wadexplorer/types';
+import { useTranslation } from '@/i18n';
 import './wadexplorer/WadExplorer.css';
 
 const SETTINGS_KEY = 'quartz-wad-explorer-settings';
@@ -76,6 +77,7 @@ function flattenRows(
 }
 
 export default function WadExplorer() {
+    const { t } = useTranslation();
     const configuredLeaguePath = useConfigStore((state) => state.settings.leaguePath) || '';
 
     const [gamePath, setGamePath] = useState(() => localStorage.getItem(GAME_PATH_KEY) || gamePathFromLeague(configuredLeaguePath));
@@ -698,7 +700,7 @@ export default function WadExplorer() {
 
             <footer className="wad-toolbar">
                 <div className="wad-toolbar__game">
-                    <span className="wad-toolbar__label">Game</span>
+                    <span className="wad-toolbar__label">{t('wadExplorerPage.footer.game')}</span>
                     <input
                         className="dl-input wad-toolbar__path"
                         value={gamePath}
@@ -708,16 +710,16 @@ export default function WadExplorer() {
                         onBlur={() => localStorage.setItem(GAME_PATH_KEY, gamePath.trim())}
                         onKeyDown={(event) => { if (event.key === 'Enter') void scanGame(); }}
                     />
-                    <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--secondary" title="Choose Game folder" onClick={async () => {
+                    <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--secondary" title={t('wadExplorerPage.footer.chooseGameFolder')} onClick={async () => {
                         const chosen = await open({ title: 'Choose League Game folder', directory: true, multiple: false });
                         if (typeof chosen === 'string') { setGamePath(chosen); void scanGame(chosen); }
                     }}><FolderOpen size={14} /></button>
-                    <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--secondary" title="Rescan" disabled={!gamePath || scanBusy} onClick={() => void scanGame()}><RefreshCw size={14} className={scanBusy ? 'is-spinning' : ''} /></button>
+                    <button className="dl-btn dl-btn--sm dl-btn--icon dl-btn--secondary" title={t('wadExplorerPage.footer.rescan')} disabled={!gamePath || scanBusy} onClick={() => void scanGame()}><RefreshCw size={14} className={scanBusy ? 'is-spinning' : ''} /></button>
                 </div>
                 <div className="wad-toolbar__actions">
-                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => setCheatOpen(true)}><BookOpen size={14} />Cheat Sheet</button>
-                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => setSettingsOpen(true)}><Settings size={14} />Settings</button>
-                    <button className="dl-btn dl-btn--sm dl-btn--primary" disabled={!selectedHashes.size || extractBusy} onClick={extractSelected}><Download size={14} />{extractBusy ? 'Extracting…' : `Extract Selected${selectedHashes.size ? ` (${selectedHashes.size})` : ''}`}</button>
+                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => setCheatOpen(true)}><BookOpen size={14} />{t('wadExplorerPage.footer.cheatSheet')}</button>
+                    <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => setSettingsOpen(true)}><Settings size={14} />{t('wadExplorerPage.footer.settings')}</button>
+                    <button className="dl-btn dl-btn--sm dl-btn--primary" disabled={!selectedHashes.size || extractBusy} onClick={extractSelected}><Download size={14} />{extractBusy ? t('wadExplorerPage.footer.extracting') : (selectedHashes.size ? t('wadExplorerPage.footer.extractSelectedCount', { count: selectedHashes.size }) : t('wadExplorerPage.footer.extractSelected'))}</button>
                 </div>
             </footer>
 
@@ -737,6 +739,7 @@ function Landing({
     hashStatus: HashStatus | null; hashBusy: boolean;
     onOpenWad: () => void; onOpenPath: (path: string) => void; onIndexGame: () => void; onDownloadHashes: () => void;
 }) {
+    const { t } = useTranslation();
     const storedRecentWads = useUiPrefsStore((s) => s.recentWads);
     const removeRecentWad = useUiPrefsStore((s) => s.removeRecentWad);
     // Only show WADs whose file still exists; prune vanished ones.
@@ -744,17 +747,17 @@ function Landing({
     return (
         <div className="wad-landing">
             <span className="wad-landing__icon"><Search size={46} /></span>
-            <h1>WAD Explorer</h1>
-            <p>Browse live game archives, preview their assets, and extract only what you need.</p>
+            <h1>{t('wadExplorerPage.landing.title')}</h1>
+            <p>{t('wadExplorerPage.landing.subtitle')}</p>
             <div className="wad-landing__actions">
-                <button className="dl-btn dl-btn--primary" onClick={onOpenWad}><FolderOpen size={15} />Open WADs</button>
-                <button className="dl-btn dl-btn--secondary" onClick={onIndexGame} disabled={scanBusy}><Database size={15} />{scanBusy ? 'Scanning…' : totalWads ? `Rescan Game (${totalWads})` : 'Index Game'}</button>
+                <button className="dl-btn dl-btn--primary" onClick={onOpenWad}><FolderOpen size={15} />{t('wadExplorerPage.landing.openWads')}</button>
+                <button className="dl-btn dl-btn--secondary" onClick={onIndexGame} disabled={scanBusy}><Database size={15} />{scanBusy ? t('wadExplorerPage.landing.scanning') : totalWads ? t('wadExplorerPage.landing.rescanGame', { count: totalWads }) : t('wadExplorerPage.landing.indexGame')}</button>
             </div>
             {scanError && <div className="wad-landing__error">{scanError}</div>}
             {hashStatus && !hashStatus.present && (
-                <div className="wad-hash-card"><Zap size={17} /><div><strong>Path hashes are not installed</strong><span>Archives still open, but unresolved files appear as hex.</span></div><button className="dl-btn dl-btn--sm dl-btn--secondary" disabled={hashBusy} onClick={onDownloadHashes}>{hashBusy ? 'Downloading…' : 'Download Hashes'}</button></div>
+                <div className="wad-hash-card"><Zap size={17} /><div><strong>{t('wadExplorerPage.landing.hashTitle')}</strong><span>{t('wadExplorerPage.landing.hashDesc')}</span></div><button className="dl-btn dl-btn--sm dl-btn--secondary" disabled={hashBusy} onClick={onDownloadHashes}>{hashBusy ? t('wadExplorerPage.landing.downloading') : t('wadExplorerPage.landing.downloadHashes')}</button></div>
             )}
-            <RecentBinsList bins={recentWads} onOpen={onOpenPath} onRemove={removeRecentWad} title="Recent WADs" />
+            <RecentBinsList bins={recentWads} onOpen={onOpenPath} onRemove={removeRecentWad} title={t('wadExplorerPage.landing.recentWads')} />
         </div>
     );
 }
@@ -764,22 +767,23 @@ function ContextMenu({ context, close, action }: {
     close: () => void;
     action: (action: 'whole' | 'hashes' | 'reload' | 'flat' | 'paths' | 'copy-path' | 'copy-hash') => void;
 }) {
+    const { t } = useTranslation();
     const row = context.row;
-    const label = row.kind === 'wad' ? row.wad.name : row.kind === 'file' || row.kind === 'directory' ? row.node.name : 'WAD Explorer';
+    const label = row.kind === 'wad' ? row.wad.name : row.kind === 'file' || row.kind === 'directory' ? row.node.name : t('wadExplorerPage.landing.title');
     return (
         <div className="wad-context-backdrop" onMouseDown={close} onContextMenu={(event) => { event.preventDefault(); close(); }}>
             <div className="wad-context" style={{ left: Math.min(context.x, window.innerWidth - 230), top: Math.min(context.y, window.innerHeight - 260) }} onMouseDown={(event) => event.stopPropagation()}>
                 <header title={label}>{label}</header>
                 {row.kind === 'wad' ? <>
-                    <button onClick={() => action('whole')}><Download size={14} />Extract Whole WAD</button>
-                    <button onClick={() => action('hashes')}><Zap size={14} />Extract Hashes</button>
-                    <button onClick={() => action('reload')}><RefreshCw size={14} />Reload WAD</button>
+                    <button onClick={() => action('whole')}><Download size={14} />{t('wadExplorerPage.contextMenu.extractWhole')}</button>
+                    <button onClick={() => action('hashes')}><Zap size={14} />{t('wadExplorerPage.contextMenu.extractHashes')}</button>
+                    <button onClick={() => action('reload')}><RefreshCw size={14} />{t('wadExplorerPage.contextMenu.reloadWad')}</button>
                 </> : row.kind === 'file' || row.kind === 'directory' ? <>
-                    <button onClick={() => action('flat')}><Download size={14} />Extract Selected</button>
-                    <button onClick={() => action('paths')}><File size={14} />{row.kind === 'directory' ? 'Extract Folder Structure' : 'Extract With Path'}</button>
+                    <button onClick={() => action('flat')}><Download size={14} />{t('wadExplorerPage.contextMenu.extractSelected')}</button>
+                    <button onClick={() => action('paths')}><File size={14} />{row.kind === 'directory' ? t('wadExplorerPage.contextMenu.extractFolder') : t('wadExplorerPage.contextMenu.extractPath')}</button>
                     <i />
-                    <button onClick={() => action('copy-path')}><BookOpen size={14} />Copy Asset Path</button>
-                    {row.kind === 'file' && row.node.pathHash && <button onClick={() => action('copy-hash')}><Zap size={14} />Copy Path Hash</button>}
+                    <button onClick={() => action('copy-path')}><BookOpen size={14} />{t('wadExplorerPage.contextMenu.copyPath')}</button>
+                    {row.kind === 'file' && row.node.pathHash && <button onClick={() => action('copy-hash')}><Zap size={14} />{t('wadExplorerPage.contextMenu.copyHash')}</button>}
                 </> : null}
             </div>
         </div>

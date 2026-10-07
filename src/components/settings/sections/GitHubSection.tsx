@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Github, Link, RefreshCw, User, KeyRound } from 'lucide-react';
 import { FormGroup, Input, InputWithToggle, Button } from '../primitives';
 import { useUiPrefsStore } from '@/lib/stores';
+import { useTranslation } from '@/i18n';
 
 type Status = { type: 'success' | 'warning' | 'error'; message: string } | null;
 
 export function GitHubSection() {
+    const { t } = useTranslation();
     const username = useUiPrefsStore((s) => s.githubUsername);
     const token = useUiPrefsStore((s) => s.githubToken);
     const repo = useUiPrefsStore((s) => s.githubRepoUrl);
@@ -24,12 +26,12 @@ export function GitHubSection() {
                 headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
             });
             if (!userRes.ok) {
-                setStatus({ type: 'error', message: `Connection failed: HTTP ${userRes.status}` });
+                setStatus({ type: 'error', message: t('settings.github.connectionFailedStatus', { status: userRes.status }) });
                 return;
             }
             const userData = await userRes.json();
             if (username && userData.login && userData.login.toLowerCase() !== username.toLowerCase()) {
-                setStatus({ type: 'warning', message: `Token belongs to '${userData.login}', not '${username}'.` });
+                setStatus({ type: 'warning', message: t('settings.github.tokenMismatch', { tokenUser: userData.login, username }) });
                 return;
             }
 
@@ -39,11 +41,11 @@ export function GitHubSection() {
                     headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
                 });
                 if (!repoRes.ok) {
-                    setStatus({ type: 'warning', message: `Connected as '${userData.login}' but couldn't access the repository (HTTP ${repoRes.status}).` });
+                    setStatus({ type: 'warning', message: t('settings.github.repoAccessDenied', { login: userData.login, status: repoRes.status }) });
                     return;
                 }
             }
-            setStatus({ type: 'success', message: `Successfully connected to GitHub as '${userData.login}'.` });
+            setStatus({ type: 'success', message: t('settings.github.connectedSuccess', { login: userData.login }) });
         } catch (e) {
             setStatus({ type: 'error', message: `Connection failed: ${e instanceof Error ? e.message : String(e)}` });
         } finally {
@@ -53,23 +55,23 @@ export function GitHubSection() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <FormGroup label="Username" icon={<User size={15} />}>
-                <Input value={username} onChange={(e) => set('githubUsername', e.target.value)} placeholder="e.g., frogcslol" />
+            <FormGroup label={t('settings.github.username')} icon={<User size={15} />}>
+                <Input value={username} onChange={(e) => set('githubUsername', e.target.value)} placeholder={t('settings.github.usernamePlaceholder')} />
             </FormGroup>
 
-            <FormGroup label="Personal Access Token" icon={<KeyRound size={15} />}>
+            <FormGroup label={t('settings.github.token')} icon={<KeyRound size={15} />}>
                 <InputWithToggle
                     type={showToken ? 'text' : 'password'}
                     value={token}
                     onChange={(e) => set('githubToken', e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    placeholder={t('settings.github.tokenPlaceholder')}
                     showValue={showToken}
                     onToggle={() => set('showGithubToken', !showToken)}
                 />
             </FormGroup>
 
-            <FormGroup label="Repository URL" icon={<Link size={15} />}>
-                <Input value={repo} onChange={(e) => set('githubRepoUrl', e.target.value)} placeholder="https://github.com/..." icon={<Link size={16} />} />
+            <FormGroup label={t('settings.github.repoUrl')} icon={<Link size={15} />}>
+                <Input value={repo} onChange={(e) => set('githubRepoUrl', e.target.value)} placeholder={t('settings.github.repoUrlPlaceholder')} icon={<Link size={16} />} />
             </FormGroup>
 
             {status && (
@@ -90,7 +92,7 @@ export function GitHubSection() {
                 onClick={testConnection}
                 disabled={testing || !username || !token}
             >
-                {testing ? 'Testing...' : 'Test Connection'}
+                {testing ? t('settings.github.testing') : t('settings.github.testConnection')}
             </Button>
         </div>
     );

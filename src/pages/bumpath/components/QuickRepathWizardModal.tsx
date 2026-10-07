@@ -1,13 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AutoFixHigh as AutoFixHighIcon, FolderOpen as FolderOpenIcon, Close as CloseIcon } from '@mui/icons-material';
 import { CustomSelect } from '../../../components/settings/primitives';
 import type { QuickBinOption } from '../utils/types';
-
-const stepLabels = [
-    'Select Main BIN',
-    'Choose Prefix',
-    'Choose Output Folder',
-];
+import { useTranslation } from '@/i18n';
 
 interface QuickRepathWizardModalProps {
     open: boolean;
@@ -61,6 +56,13 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
     onClose,
     isRunning,
 }: QuickRepathWizardModalProps) {
+    const { t } = useTranslation();
+    const stepLabels = useMemo(() => [
+        t('bumpath.wizard.step1'),
+        t('bumpath.wizard.step2'),
+        t('bumpath.wizard.step3'),
+    ], [t]);
+
     if (!open) return null;
 
     const canNextStep1 = Boolean(selectedMainBin);
@@ -81,7 +83,7 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
         <div className="dl-modal-backdrop" onClick={isRunning ? undefined : onClose}>
             <div className="dl-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="dl-modal__head">
-                    <h2 className="dl-modal__title">Quick Repath Wizard</h2>
+                    <h2 className="dl-modal__title">{t('bumpath.wizard.title')}</h2>
                     {!isRunning && (
                         <button type="button" className="dl-modal__close" onClick={onClose} title="Close">
                             <span className="dl-icon"><CloseIcon /></span>
@@ -120,7 +122,7 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
                                 value={selectedMainBin}
                                 onChange={setSelectedMainBin}
                                 options={binOptions.map((bin) => ({ value: bin.value, label: bin.label }))}
-                                placeholder="Main BIN"
+                                placeholder={t('bumpath.wizard.selectMainBinPlaceholder')}
                             />
                         </div>
                     )}
@@ -134,7 +136,7 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
                                 className="dl-input"
                                 value={quickPrefix}
                                 onChange={(e) => setQuickPrefix(e.target.value)}
-                                placeholder="e.g. bum"
+                                placeholder={t('bumpath.wizard.prefixPlaceholder')}
                             />
                         </div>
                     )}
@@ -157,12 +159,12 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
                                     onClick={onSelectOutputDir}
                                 >
                                     <span className="dl-icon"><FolderOpenIcon /></span>
-                                    <span>Browse</span>
+                                    <span>{t('bumpath.wizard.selectOutputBtn')}</span>
                                 </button>
                             </div>
                             <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {toggleRow('Ignore Missing Files', ignoreMissing, setIgnoreMissing)}
-                                {toggleRow('Combine Linked BINs', combineLinked, setCombineLinked)}
+                                {toggleRow(t('bumpath.settings.ignoreMissing'), ignoreMissing, setIgnoreMissing)}
+                                {toggleRow(t('bumpath.settings.combineLinked'), combineLinked, setCombineLinked)}
                             </div>
                         </div>
                     )}
@@ -170,10 +172,10 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
 
                 <div className="dl-modal__foot">
                     <button type="button" className="dl-btn dl-btn--ghost" onClick={onClose} disabled={isRunning}>
-                        Cancel
+                        {t('bumpath.cancel')}
                     </button>
                     <button type="button" className="dl-btn dl-btn--secondary" onClick={handleBack} disabled={isRunning || step === 0}>
-                        Back
+                        {t('bumpath.wizard.back')}
                     </button>
                     {step < 2 ? (
                         <button
@@ -182,7 +184,7 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
                             onClick={handleNext}
                             disabled={isRunning || (step === 0 ? !canNextStep1 : !canNextStep2)}
                         >
-                            Next
+                            {t('bumpath.wizard.next')}
                         </button>
                     ) : (
                         <button
@@ -192,7 +194,7 @@ const QuickRepathWizardModal = React.memo(function QuickRepathWizardModal({
                             disabled={!canRun}
                         >
                             <span className="dl-icon"><AutoFixHighIcon /></span>
-                            <span>{isRunning ? 'Running...' : 'Run Quick Repath'}</span>
+                            <span>{isRunning ? t('bumpath.wizard.running') : t('bumpath.wizard.run')}</span>
                         </button>
                     )}
                 </div>

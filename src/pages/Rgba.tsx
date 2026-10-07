@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { Copy, RotateCcw, Pipette, Eye, EyeOff } from 'lucide-react';
 import { ColorPickerHost } from './paint/components/ColorPicker';
 import { openColorPicker, cleanupColorPickers } from './paint/components/colorPickerController';
+import { useTranslation } from '@/i18n';
 import './rgba/Rgba.css';
 
 type Vec4 = [number, number, number, number];
@@ -97,11 +98,13 @@ function Rgba() {
         cleanupColorPickers();
     }, []);
 
+    const { t } = useTranslation();
+
     const info = [
-        { label: 'Hex Color', value: hexColor },
-        { label: 'RGB (0-255)', value: formatRGB },
-        { label: 'RGBA (0-1)', value: formatRGBA },
-        { label: 'Alpha', value: `${alphaPercent.toFixed(1)}%` },
+        { label: t('rgba.hexColor'), value: hexColor },
+        { label: t('rgba.rgbLabel'), value: formatRGB },
+        { label: t('rgba.rgbaValueLabel'), value: formatRGBA },
+        { label: t('rgba.alphaValueLabel'), value: `${alphaPercent.toFixed(1)}%` },
     ];
 
     return (
@@ -113,16 +116,16 @@ function Rgba() {
                 <section className="rgba-col">
                     <div className="rgba-head">
                         <Pipette size={18} />
-                        <span>Color Selection</span>
+                        <span>{t('rgba.colorSelection')}</span>
                     </div>
 
                     <div className="rgba-selrow">
-                        <button className="rgba-swatch" onClick={handleColorPickerClick} style={{ background: hexColor }} title="Pick a color">
+                        <button className="rgba-swatch" onClick={handleColorPickerClick} style={{ background: hexColor }} title={t('rgba.pickAColor')}>
                             <span className="rgba-swatch__badge"><Pipette size={11} /></span>
                         </button>
 
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div className="rgba-label">RGBA (0-1)</div>
+                            <div className="rgba-label">{t('rgba.rgbaLabel')}</div>
                             <input
                                 className="dl-input"
                                 value={rgbaInput}
@@ -135,7 +138,7 @@ function Rgba() {
                         <button
                             className={`dl-btn dl-btn--icon${showAlpha ? ' dl-btn--active' : ''}`}
                             onClick={() => setShowAlpha((s) => !s)}
-                            title={showAlpha ? 'Hide alpha' : 'Show alpha'}
+                            title={showAlpha ? t('rgba.hideAlpha') : t('rgba.showAlpha')}
                         >
                             {showAlpha ? <Eye size={16} /> : <EyeOff size={16} />}
                         </button>
@@ -143,7 +146,7 @@ function Rgba() {
 
                     {showAlpha && (
                         <div className="rgba-alpha">
-                            <div className="rgba-label">Alpha: {Math.round(alphaPreview * 100)}% ({alphaPreview.toFixed(3)})</div>
+                            <div className="rgba-label">{t('rgba.alphaLabel', { percent: Math.round(alphaPreview * 100), value: alphaPreview.toFixed(3) })}</div>
                             <span className="dl-slider" style={{ '--_value': `${alphaPreview * 100}%` } as React.CSSProperties}>
                                 <input
                                     type="range" min={0} max={1} step={0.001}
@@ -159,11 +162,11 @@ function Rgba() {
                     <div className="rgba-actions">
                         <button className={`dl-btn ${copied ? 'dl-btn--active' : 'dl-btn--primary'}`} onClick={handleCopyVec4} style={{ flex: 1 }}>
                             <span className="dl-icon"><Copy size={15} /></span>
-                            <span>{copied ? 'Copied' : 'Copy Vec4'}</span>
+                            <span>{copied ? t('rgba.copied') : t('rgba.copyVec4')}</span>
                         </button>
                         <button className="dl-btn dl-btn--secondary" onClick={handleReset} style={{ flex: 1 }}>
                             <span className="dl-icon"><RotateCcw size={15} /></span>
-                            <span>Reset</span>
+                            <span>{t('rgba.reset')}</span>
                         </button>
                     </div>
                 </section>
@@ -172,7 +175,7 @@ function Rgba() {
 
                 {/* Right — Color Information & Preview */}
                 <section className="rgba-col">
-                    <div className="rgba-head"><span>Color Information</span></div>
+                    <div className="rgba-head"><span>{t('rgba.colorInformation')}</span></div>
 
                     <div className="rgba-infogrid">
                         {info.map((item) => (
@@ -183,15 +186,15 @@ function Rgba() {
                         ))}
                     </div>
 
-                    <div className="rgba-head" style={{ marginTop: 4 }}><span>Color Preview</span></div>
+                    <div className="rgba-head" style={{ marginTop: 4 }}><span>{t('rgba.colorPreview')}</span></div>
 
                     <div className="rgba-previewgrid">
                         <div>
-                            <div className="rgba-label">Solid Color</div>
+                            <div className="rgba-label">{t('rgba.solidColor')}</div>
                             <div className="rgba-preview" style={{ background: hexColor }}>{hexColor}</div>
                         </div>
                         <div>
-                            <div className="rgba-label">With Alpha</div>
+                            <div className="rgba-label">{t('rgba.withAlpha')}</div>
                             <div className="rgba-preview rgba-preview--checker">
                                 <div className="rgba-preview__fill" style={{ background: hexColor, opacity: vec4[3] }}>
                                     {alphaPercent.toFixed(1)}%

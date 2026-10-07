@@ -19,6 +19,7 @@ import { useFileExplorer } from '@/components/explorer';
 import { Button, CustomSelect, FormGroup } from '@/components/settings/primitives';
 import { useNavigationStore } from '@/lib/stores';
 import { useFileDrop } from '@/lib/util/useFileDrop';
+import { useTranslation } from '@/i18n';
 import {
     readFileBase64,
     prefsGet,
@@ -93,6 +94,7 @@ async function readAsDataUrl(p: string): Promise<string> {
 }
 
 export function Upscale() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const goToSettings = useNavigationStore((s) => s.goToSettings);
     const [exePath, setExePath] = useState('');
@@ -393,7 +395,7 @@ export function Upscale() {
                 await prefsSet('RealesrganExePath', path);
             } else {
                 setExePath('');
-                setEnsureError('Upscayl binary not found. Install it from Settings, External Tools, AI Upscale Models.');
+                setEnsureError(t('upscale.binaryNotFound'));
             }
         } catch (e) {
             setEnsureError(String((e as Error)?.message || e));
@@ -509,13 +511,13 @@ export function Upscale() {
     const handleResetZoom = () => setZoomLevel(100);
 
     const availableModels = [
-        { value: 'upscayl-standard-4x', label: 'Upscayl Standard' },
-        { value: 'upscayl-lite-4x', label: 'Upscayl Lite' },
-        { value: 'ultrasharp-4x', label: 'UltraSharp' },
-        { value: 'remacri-4x', label: 'Remacri' },
-        { value: 'digital-art-4x', label: 'Digital Art' },
-        { value: 'high-fidelity-4x', label: 'High Fidelity' },
-        { value: 'ultramix-balanced-4x', label: 'UltraMix Balanced' },
+        { value: 'upscayl-standard-4x', label: t('upscale.models.standard') },
+        { value: 'upscayl-lite-4x', label: t('upscale.models.lite') },
+        { value: 'ultrasharp-4x', label: t('upscale.models.ultrasharp') },
+        { value: 'remacri-4x', label: t('upscale.models.remacri') },
+        { value: 'digital-art-4x', label: t('upscale.models.digitalArt') },
+        { value: 'high-fidelity-4x', label: t('upscale.models.highFidelity') },
+        { value: 'ultramix-balanced-4x', label: t('upscale.models.ultramix') },
     ];
 
     const pathChip = (text: string) => (
@@ -532,7 +534,7 @@ export function Upscale() {
         <div className="upscale-modal-overlay">
             <div className="upscale-modal" style={{ maxWidth: 460 }}>
                 <div className="upscale-modal-head">
-                    <span className="upscale-modal-title">AI PROCESSING IN PROGRESS</span>
+                    <span className="upscale-modal-title">{t('upscale.processingTitle')}</span>
                     <button className="dl-btn dl-btn--ghost dl-btn--sm" onClick={cancelUpscaling}><CloseIcon size={16} /></button>
                 </div>
                 <div style={{ padding: 28, textAlign: 'center' }}>
@@ -542,27 +544,27 @@ export function Upscale() {
                     </div>
 
                     <div style={{ fontWeight: 700, fontSize: '1.15rem', marginBottom: 6 }}>
-                        {batchMode ? `${batchProgress.currentFile} of ${batchProgress.totalFiles} Files` : 'Enhancing Image'}
+                        {batchMode ? t('upscale.filesProgress', { current: batchProgress.currentFile, total: batchProgress.totalFiles }) : t('upscale.enhancingImage')}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 24, padding: '0 12px', lineHeight: 1.5 }}>
                         {batchMode
-                            ? <>Currently processing: <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{batchProgress.currentFileName}</span></>
-                            : `AI is upscaling your image by ${scale}x. This may take a minute depending on your hardware.`}
+                            ? <>{t('upscale.currentlyProcessing')}<span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{batchProgress.currentFileName}</span></>
+                            : t('upscale.enhancingDesc', { scale })}
                     </div>
 
                     <div style={{ marginBottom: 24 }}>
                         {batchMode ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                <ProgressRow label="OVERALL PROGRESS" pct={batchProgress.overallProgress} />
-                                <ProgressRow label="CURRENT FILE" pct={Math.round(batchProgress.fileProgress)} thin />
+                                <ProgressRow label={t('upscale.overallProgress')} pct={batchProgress.overallProgress} />
+                                <ProgressRow label={t('upscale.currentFile')} pct={Math.round(batchProgress.fileProgress)} thin />
                             </div>
                         ) : (
-                            <ProgressRow label="PROCESSING" pct={Math.round(progress)} big />
+                            <ProgressRow label={t('upscale.processing')} pct={Math.round(progress)} big />
                         )}
                     </div>
 
                     <button className="dl-btn dl-btn--danger" onClick={cancelUpscaling} style={{ padding: '0 32px' }}>
-                        Cancel Process
+                        {t('upscale.cancelProcess')}
                     </button>
                 </div>
             </div>
@@ -591,7 +593,7 @@ export function Upscale() {
                 {/* Sidebar */}
                 <div className="upscale-sidebar">
                     {/* Step 1: Input — disabled until the AI components are installed. */}
-                    <FormGroup label={batchMode ? 'Source Folder' : 'Source Image'}>
+                    <FormGroup label={batchMode ? t('upscale.sourceFolder') : t('upscale.sourceImage')}>
                         <Button
                             variant="secondary"
                             fullWidth
@@ -599,14 +601,14 @@ export function Upscale() {
                             onClick={pickInput}
                             disabled={isRunning || !isInstalled}
                         >
-                            {inputPath ? 'Change Selection' : (batchMode ? 'Select Folder' : 'Select Image')}
+                            {inputPath ? t('upscale.changeSelection') : (batchMode ? t('upscale.selectFolder') : t('upscale.selectImage'))}
                         </Button>
                         {inputPath && pathChip(basename(inputPath))}
                     </FormGroup>
 
                     {/* Step 2: Model Configuration — dims until an input is picked. */}
                     <div style={dimStyle}>
-                        <FormGroup label="Model Configuration">
+                        <FormGroup label={t('upscale.modelConfig')}>
                             <CustomSelect
                                 value={model}
                                 onChange={setModel}
@@ -616,7 +618,7 @@ export function Upscale() {
 
                             <div>
                                 <div className="upscale-rowlabel">
-                                    <span>Upscale Scale</span>
+                                    <span>{t('upscale.upscaleScale')}</span>
                                     <span className="upscale-rowvalue">{scale}x</span>
                                 </div>
                                 <input
@@ -630,7 +632,7 @@ export function Upscale() {
 
                     {/* Step 3: Output — dims until an input is picked. */}
                     <div style={dimStyle}>
-                        <FormGroup label="Destination">
+                        <FormGroup label={t('upscale.destination')}>
                             <Button
                                 variant="secondary"
                                 fullWidth
@@ -638,7 +640,7 @@ export function Upscale() {
                                 onClick={pickOutput}
                                 disabled={isRunning}
                             >
-                                {outputDir ? 'Change Folder' : 'Set Output Folder'}
+                                {outputDir ? t('upscale.changeFolder') : t('upscale.setOutputFolder')}
                             </Button>
                             {outputDir && pathChip(outputDir)}
                         </FormGroup>
@@ -652,7 +654,7 @@ export function Upscale() {
                             onClick={startUpscale}
                             disabled={!exePath || !inputPath || !outputDir || isRunning}
                         >
-                            {isRunning ? 'Upscaling...' : 'Start Upscaling'}
+                            {isRunning ? t('upscale.upscaling') : t('upscale.startUpscaling')}
                         </Button>
 
                         {ensureError && <div className="upscale-error">{ensureError}</div>}
@@ -665,10 +667,10 @@ export function Upscale() {
                     <div className="upscale-toolbar">
                         {/* Zoom controls dim until an image is loaded (nothing to zoom). */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, ...dimStyle }}>
-                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleZoomOut} title="Zoom out"><ZoomOutIcon size={18} /></button>
+                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleZoomOut} title={t('upscale.zoomOut')}><ZoomOutIcon size={18} /></button>
                             <span className="upscale-zoom">{zoomLevel}%</span>
-                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleZoomIn} title="Zoom in"><ZoomInIcon size={18} /></button>
-                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleResetZoom} title="Reset zoom" style={{ marginLeft: 6 }}><ResetIcon size={16} /></button>
+                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleZoomIn} title={t('upscale.zoomIn')}><ZoomInIcon size={18} /></button>
+                            <button className="upscale-iconbtn upscale-iconbtn--sm" onClick={handleResetZoom} title={t('upscale.resetZoom')} style={{ marginLeft: 6 }}><ResetIcon size={16} /></button>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -678,20 +680,20 @@ export function Upscale() {
                                     {upDims && <> <span className="upscale-dims__arrow">→</span> {upDims.w}×{upDims.h}</>}
                                 </span>
                             )}
-                            {upscaledImage && <span className="upscale-badge">AI ENHANCED COMPARISON</span>}
+                            {upscaledImage && <span className="upscale-badge">{t('upscale.aiEnhancedComparison')}</span>}
 
                             {/* Shown only when the AI components aren't installed — sits left of
                                 the mode pills and leads to Settings, External Tools. */}
                             {!isInstalled && (
                                 <button className="upscale-install-link" onClick={() => goToSettings({ section: 'tools', highlight: 'upscale' })}>
                                     <span className="upscale-install-link__dot" />
-                                    Install in Settings
+                                    {t('upscale.installInSettings')}
                                     <ArrowRightIcon size={13} />
                                 </button>
                             )}
 
                             <div className="upscale-pills">
-                                {([{ key: false, label: 'Single File' }, { key: true, label: 'Batch Mode' }] as const).map(({ key, label }) => (
+                                {([{ key: false, label: t('upscale.singleFile') }, { key: true, label: t('upscale.batchMode') }] as const).map(({ key, label }) => (
                                     <button
                                         key={String(key)}
                                         className={`upscale-pill${batchMode === key ? ' is-active' : ''}`}
@@ -713,10 +715,10 @@ export function Upscale() {
                                 ? <FolderIcon size={48} color="var(--accent-primary)" strokeWidth={1.5} style={{ display: 'block', marginBottom: 16 }} />
                                 : <ImageIcon size={48} color="var(--accent-primary)" strokeWidth={1.5} style={{ display: 'block', marginBottom: 16 }} />}
                             <div style={{ color: 'var(--text-secondary)', fontWeight: 700, fontSize: '1rem', marginBottom: 4 }}>
-                                {isDragOver ? 'Drop to load' : batchMode ? 'No Folder Selected' : 'No Image Selected'}
+                                {isDragOver ? t('upscale.dropToLoad') : batchMode ? t('upscale.noFolderSelected') : t('upscale.noImageSelected')}
                             </div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: 18 }}>
-                                {batchMode ? 'Drop a folder here' : 'Drop an image here'}
+                                {batchMode ? t('upscale.dropFolderHere') : t('upscale.dropImageHere')}
                             </div>
                             <button
                                 className="dl-btn dl-btn--primary"
@@ -725,7 +727,7 @@ export function Upscale() {
                                 style={{ pointerEvents: 'auto' }}
                             >
                                 <span className="dl-icon">{batchMode ? <FolderOpenIcon size={16} /> : <UploadIcon size={16} />}</span>
-                                <span>{batchMode ? 'Select Folder' : 'Select Image'}</span>
+                                <span>{batchMode ? t('upscale.selectFolder') : t('upscale.selectImage')}</span>
                             </button>
                         </div>
                     )}
@@ -737,7 +739,7 @@ export function Upscale() {
                         {showFolderGrid && (
                             <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
                                 <div style={{ fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.82rem', marginBottom: 14 }}>
-                                    SOURCE FOLDER: {folderContents.length} IMAGES
+                                    {t('upscale.sourceFolderImages', { count: folderContents.length })}
                                 </div>
                                 <div className="upscale-grid">
                                     {folderContents.map((file, idx) => (

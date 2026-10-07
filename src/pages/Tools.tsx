@@ -23,6 +23,7 @@ import {
     loadExes as loadStoredExes, saveExes as saveStoredExes,
     loadEmojiData, saveEmojiData, type StoredExe,
 } from './tools/toolsStorage';
+import { useTranslation } from '@/i18n';
 
 type ExeEntry = StoredExe;
 
@@ -40,6 +41,7 @@ const isExeName = (name: string) => {
 };
 
 export function Tools() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const [exes, setExes] = useState<ExeEntry[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
@@ -106,7 +108,7 @@ export function Tools() {
             if (isSameAsLast) return;
 
             const added = addExes(paths);
-            if (added > 0) notify(`Added ${added} executable(s)`, 'success');
+            if (added > 0) notify(t('toolsPage.addedExecutables', { count: added }), 'success');
         } finally {
             setIsProcessing(false);
         }
@@ -117,7 +119,7 @@ export function Tools() {
         if (!picked) return;
         const paths = Array.isArray(picked) ? picked : [picked];
         const added = addExes(paths);
-        notify(added > 0 ? `Added ${added} executable(s)` : 'No new executables added', added > 0 ? 'success' : 'info');
+        notify(added > 0 ? t('toolsPage.addedExecutables', { count: added }) : t('toolsPage.noNewExecutables'), added > 0 ? 'success' : 'info');
     };
 
     const removeExe = (exeName: string) => {
@@ -126,7 +128,7 @@ export function Tools() {
             persistEmoji(updated);
             return updated;
         });
-        notify(`Removed ${exeName}`, 'success');
+        notify(t('toolsPage.removedExecutable', { name: exeName }), 'success');
     };
 
     // ─── Running ────────────────────────────────────────────────────────────────
@@ -135,14 +137,14 @@ export function Tools() {
             const result = await toolsExecute(exe.path, args, { cwd, openConsole: true });
             setExes((prev) => prev.map((e) => (e.name === exe.name ? { ...e, lastUsed: new Date().toISOString() } : e)));
             if (result.code === 0) {
-                notify(`${exe.name} completed successfully! Check your folder for changes.`, 'success');
+                notify(t('toolsPage.runSuccess', { name: exe.name }), 'success');
             } else {
                 const errMsg = (result.stderr || result.stdout || 'Unknown error').toString().slice(0, 500);
-                notify(`${exe.name} failed (code ${result.code}): ${errMsg}`, 'error');
+                notify(t('toolsPage.runFailed', { name: exe.name, code: result.code, error: errMsg }), 'error');
             }
         } catch (e) {
             log.error('runExe', e);
-            notify(`Error running ${exe.name}: ${String((e as Error)?.message || e)}`, 'error');
+            notify(t('toolsPage.runError', { name: exe.name, error: String((e as Error)?.message || e) }), 'error');
         }
     };
 
@@ -154,7 +156,7 @@ export function Tools() {
                 await runExe(exe, [normalized], dirname(normalized));
             } catch (error) {
                 log.error('handleExeDrop', error);
-                notify(`Error processing ${basename(p)}: ${String((error as Error)?.message || error)}`, 'error');
+                notify(t('toolsPage.processError', { name: basename(p), error: String((error as Error)?.message || error) }), 'error');
             }
         }
     };
@@ -238,10 +240,10 @@ export function Tools() {
             // No copied-tools folder in the Tauri port; reveal the directory of the
             // first added executable so the action still does something sensible.
             const first = exes[0];
-            if (!first) { notify('Add an executable first', 'info'); return; }
+            if (!first) { notify(t('toolsPage.addExeFirst'), 'info'); return; }
             await openPath(dirname(first.path));
         } catch (error) {
-            notify(`Error opening folder: ${String((error as Error)?.message || error)}`, 'error');
+            notify(t('toolsPage.openFolderError', { error: String((error as Error)?.message || error) }), 'error');
         }
     };
 
@@ -255,7 +257,7 @@ export function Tools() {
             return updated;
         });
         closeEmojiDialog();
-        notify(emoji ? `Emoji ${emoji} added to ${exeName}` : `Emoji removed from ${exeName}`, 'success');
+        notify(emoji ? t('toolsPage.emojiAdded', { emoji, name: exeName }) : t('toolsPage.emojiRemoved', { name: exeName }), 'success');
     };
 
     // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -292,8 +294,8 @@ export function Tools() {
                         <AppsIcon />
                     </Box>
                     <Box>
-                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>Tools Manager</Typography>
-                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Add executables and drag skin folders onto them</Typography>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>{t('toolsPage.title')}</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{t('toolsPage.subtitle')}</Typography>
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -301,7 +303,7 @@ export function Tools() {
                     <IconButton onClick={openToolsFolder} size="small" sx={{ color: 'var(--text-secondary)', '&:hover': { color: 'var(--accent-primary)' } }}><FolderIcon fontSize="small" /></IconButton>
                     <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={pickExe}
                         sx={{ ml: 1, background: 'color-mix(in oklab, var(--accent-primary) 15%, transparent)', color: 'var(--accent-primary)', border: '1px solid color-mix(in oklab, var(--accent-primary) 30%, transparent)', boxShadow: 'none', borderRadius: 'var(--radius-sm)', textTransform: 'none', fontSize: '0.75rem', fontWeight: 600, px: 2, '&:hover': { background: 'color-mix(in oklab, var(--accent-primary) 25%, transparent)', borderColor: 'var(--accent-primary)', boxShadow: 'none' } }}>
-                        Add Exe
+                        {t('toolsPage.addExe')}
                     </Button>
                 </Box>
             </Box>
@@ -311,21 +313,21 @@ export function Tools() {
                 {isProcessing && (
                     <Box sx={{ mb: 3 }}>
                         <LinearProgress sx={{ borderRadius: 1, height: 6, backgroundColor: 'var(--bg-tertiary)', '& .MuiLinearProgress-bar': { background: 'var(--accent-gradient)' } }} />
-                        <Typography sx={{ mt: 1, color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Processing files...</Typography>
+                        <Typography sx={{ mt: 1, color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('toolsPage.processingFiles')}</Typography>
                     </Box>
                 )}
 
-                <div className="tc-section-label"><span className="tc-section-label__accent">Built-in Tools</span></div>
+                <div className="tc-section-label"><span className="tc-section-label__accent">{t('toolsPage.builtInTools')}</span></div>
                 <BinColorCopyCard onNotify={({ message, severity }) => notify(message, severity)} />
                 <FixVfxShapeCard onNotify={({ message, severity }) => notify(message, severity)} />
 
-                <div className="tc-section-label" style={{ marginTop: 24 }}><span className="tc-section-label__accent">External Executables</span></div>
+                <div className="tc-section-label" style={{ marginTop: 24 }}><span className="tc-section-label__accent">{t('toolsPage.externalExecutables')}</span></div>
 
                 {exes.length === 0 ? (
                     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, color: 'var(--text-muted)' }}>
                         <AppsIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-                        <Typography variant="h6" sx={{ color: 'var(--text-secondary)', fontWeight: 600 }}>No Executables Added</Typography>
-                        <Typography variant="body2">Drag and drop .exe files here or use the Add button</Typography>
+                        <Typography variant="h6" sx={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{t('toolsPage.noExecutablesAdded')}</Typography>
+                        <Typography variant="body2">{t('toolsPage.noExecutablesHint')}</Typography>
                     </Box>
                 ) : (
                     <Grid container spacing={2.5}>
@@ -354,19 +356,19 @@ export function Tools() {
                                     {/* Drop Zone */}
                                     <Box sx={dropZoneSx(dragTarget === exe.name)}>
                                         <FolderIcon sx={{ fontSize: 28, color: dragTarget === exe.name ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
-                                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: dragTarget === exe.name ? 'var(--accent-primary)' : 'var(--text-muted)' }}>Drop skin folders here</Typography>
+                                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: dragTarget === exe.name ? 'var(--accent-primary)' : 'var(--text-muted)' }}>{t('toolsPage.dropSkinFolders')}</Typography>
                                     </Box>
 
                                     {/* Last used */}
                                     {exe.lastUsed && (
                                         <Box sx={{ mt: 1, flex: 1 }}>
-                                            <Typography sx={{ color: 'var(--accent-primary)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1 }}>Recent Activity</Typography>
+                                            <Typography sx={{ color: 'var(--accent-primary)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1 }}>{t('toolsPage.recentActivity')}</Typography>
                                             <List sx={{ p: 0, '& .MuiListItem-root': { px: 1, py: 0.75, borderRadius: 'var(--radius-sm)', mb: 0.5, transition: 'all var(--motion-fast)', '&:hover': { background: 'var(--bg-tertiary)' } } }}>
                                                 <ListItem>
                                                     <ListItemIcon sx={{ minWidth: 28 }}><SettingsIcon sx={{ fontSize: 16, color: 'var(--text-muted)' }} /></ListItemIcon>
                                                     <ListItemText
-                                                        primary="Last run"
-                                                        secondary={`Used ${new Date(exe.lastUsed).toLocaleString()}`}
+                                                        primary={t('toolsPage.lastRun')}
+                                                        secondary={t('toolsPage.usedAt', { time: new Date(exe.lastUsed).toLocaleString() })}
                                                         primaryTypographyProps={{ sx: { fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 500 } }}
                                                         secondaryTypographyProps={{ sx: { fontSize: '0.62rem', color: 'var(--text-muted)', mt: -0.25 } }}
                                                     />
@@ -385,17 +387,17 @@ export function Tools() {
             <Box sx={{ p: 1.5, px: 3, borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: 2, position: 'relative', zIndex: 10 }}>
                 <InfoIcon sx={{ fontSize: 16, color: 'var(--accent-primary)' }} />
                 <Typography sx={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                    <strong>Workflow:</strong> Add your favorite tools once, then drag and drop folders onto them to process.
+                    <strong>{t('toolsPage.workflowTitle')}</strong> {t('toolsPage.workflowDesc')}
                 </Typography>
             </Box>
 
             {/* Emoji dialog */}
             <Dialog open={emojiDialog.open} onClose={closeEmojiDialog} maxWidth="sm" fullWidth PaperProps={{ sx: { background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', boxShadow: '0 24px 48px -16px rgba(0,0,0,0.6)' } }}>
-                <DialogTitle sx={{ color: 'var(--text-primary)', fontSize: '1.1rem', fontWeight: 700, pb: 1 }}>Choose Emoji for {emojiDialog.exeName}</DialogTitle>
+                <DialogTitle sx={{ color: 'var(--text-primary)', fontSize: '1.1rem', fontWeight: 700, pb: 1 }}>{t('toolsPage.chooseEmoji', { name: emojiDialog.exeName ?? '' })}</DialogTitle>
                 <DialogContent>
-                    <TextField fullWidth placeholder="Paste any emoji here..." value={selectedEmoji} onChange={(e) => setSelectedEmoji(e.target.value)}
+                    <TextField fullWidth placeholder={t('toolsPage.pasteEmoji') || ''} value={selectedEmoji} onChange={(e) => setSelectedEmoji(e.target.value)}
                         sx={{ mb: 2.5, mt: 1, '& .MuiOutlinedInput-root': { background: 'var(--bg-tertiary)', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem', '& fieldset': { borderColor: 'var(--border)' }, '&:hover fieldset': { borderColor: 'color-mix(in oklab, var(--accent-primary) 30%, var(--border))' }, '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' } } }} />
-                    <Typography sx={{ color: 'var(--accent-primary)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1.5 }}>Popular Choices</Typography>
+                    <Typography sx={{ color: 'var(--accent-primary)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1.5 }}>{t('toolsPage.popularChoices')}</Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 0.75 }}>
                         {POPULAR_EMOJIS.map((emoji, idx) => (
                             <Button key={idx} onClick={() => setSelectedEmoji(emoji)} sx={{ minWidth: 0, p: 0.5, fontSize: '1.25rem', borderRadius: 'var(--radius-sm)', background: selectedEmoji === emoji ? 'color-mix(in oklab, var(--accent-primary) 20%, transparent)' : 'var(--bg-tertiary)', border: `1px solid ${selectedEmoji === emoji ? 'var(--accent-primary)' : 'transparent'}`, '&:hover': { background: 'var(--bg-hover)' } }}>{emoji}</Button>
@@ -403,12 +405,12 @@ export function Tools() {
                     </Box>
                 </DialogContent>
                 <DialogActions sx={{ p: 2.5, pt: 1 }}>
-                    <Button onClick={() => emojiDialog.exeName && setExeEmoji(emojiDialog.exeName, null)} sx={{ color: 'var(--color-danger)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'none' }}>Remove Emoji</Button>
+                    <Button onClick={() => emojiDialog.exeName && setExeEmoji(emojiDialog.exeName, null)} sx={{ color: 'var(--color-danger)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'none' }}>{t('toolsPage.removeEmoji')}</Button>
                     <Box sx={{ flex: 1 }} />
-                    <Button onClick={closeEmojiDialog} sx={{ color: 'var(--text-secondary)', textTransform: 'none', fontWeight: 600 }}>Cancel</Button>
+                    <Button onClick={closeEmojiDialog} sx={{ color: 'var(--text-secondary)', textTransform: 'none', fontWeight: 600 }}>{t('common.cancel')}</Button>
                     <Button onClick={() => emojiDialog.exeName && setExeEmoji(emojiDialog.exeName, selectedEmoji)} disabled={!selectedEmoji} variant="contained"
                         sx={{ background: 'color-mix(in oklab, var(--accent-primary) 12%, transparent)', color: 'var(--accent-primary)', border: '1px solid color-mix(in oklab, var(--accent-primary) 35%, transparent)', borderRadius: 'var(--radius-sm)', textTransform: 'none', fontWeight: 700, px: 3, boxShadow: 'none', '&:hover': { background: 'color-mix(in oklab, var(--accent-primary) 22%, transparent)', borderColor: 'color-mix(in oklab, var(--accent-primary) 60%, transparent)' }, '&.Mui-disabled': { background: 'var(--bg-tertiary)', color: 'var(--text-muted)' } }}>
-                        Save Emoji
+                        {t('toolsPage.saveEmoji')}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -427,8 +429,8 @@ export function Tools() {
                     <Box sx={{ width: 80, height: 80, borderRadius: 'var(--radius-lg)', background: 'color-mix(in oklab, var(--accent-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-primary)', mb: 3, mx: 'auto' }}>
                         <AddIcon sx={{ fontSize: 40 }} />
                     </Box>
-                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'var(--text-primary)' }}>Add Executables</Typography>
-                    <Typography sx={{ color: 'var(--text-secondary)' }}>Drop .exe, .bat, or .cmd files to add them to your manager</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'var(--text-primary)' }}>{t('toolsPage.addExecutablesGlobal')}</Typography>
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>{t('toolsPage.dropExecutablesGlobal')}</Typography>
                 </Box>
             </Box>
         </Box>

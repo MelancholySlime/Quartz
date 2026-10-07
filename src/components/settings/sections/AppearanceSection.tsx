@@ -12,6 +12,7 @@ import {
     type WallpaperItem,
 } from '@/lib/api';
 import { log } from '@/lib/util/logger';
+import { useTranslation } from '@/i18n';
 
 const card = cardSurface;
 
@@ -40,6 +41,7 @@ function Checkbox({ checked, onChange, children }: { checked: boolean; onChange:
 }
 
 export function AppearanceSection() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const prefs = useUiPrefsStore();
     const set = prefs.set;
@@ -90,50 +92,50 @@ export function AppearanceSection() {
     };
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <FormGroup label="Font Family" icon={<Type size={15} />}>
+            <FormGroup label={t('settings.appearance.fontFamily')} icon={<Type size={15} />}>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <div style={{ flex: 1 }}>
                         <CustomSelect value={prefs.font} onChange={onFontChange} icon={<Type size={16} />} options={fonts} />
                     </div>
-                    <Button icon={<FolderOpen size={16} />} variant="secondary" onClick={() => openFontsFolder().catch((e) => log.error('openFontsFolder failed', String(e)))}>Folder</Button>
-                    <Button icon={<RefreshCw size={16} />} variant="secondary" onClick={loadFonts}>Refresh</Button>
+                    <Button icon={<FolderOpen size={16} />} variant="secondary" onClick={() => openFontsFolder().catch((e) => log.error('openFontsFolder failed', String(e)))}>{t('settings.appearance.folder')}</Button>
+                    <Button icon={<RefreshCw size={16} />} variant="secondary" onClick={loadFonts}>{t('settings.appearance.refresh')}</Button>
                 </div>
             </FormGroup>
 
-            <FormGroup label="Color Theme" icon={<Palette size={15} />}>
+            <FormGroup label={t('settings.appearance.colorTheme')} icon={<Palette size={15} />}>
                 <ThemeCardGrid />
             </FormGroup>
 
-            <FormGroup label="Interface Style" icon={<PanelsTopLeft size={15} />}>
+            <FormGroup label={t('settings.appearance.interfaceStyle')} icon={<PanelsTopLeft size={15} />}>
                 <div className="settings-card" style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <Checkbox
                         checked={prefs.sharpButtonCorners}
                         onChange={(checked) => setGlobalAppearance('sharpButtonCorners', checked)}
                     >
-                        Sharp button corners
+                        {t('settings.appearance.sharpButtonCorners')}
                     </Checkbox>
                     <div style={{ color: 'var(--text-muted)', fontSize: '11px', lineHeight: 1.45, marginTop: '-6px' }}>
-                        Removes rounding from every button and clickable button control across Quartz.
+                        {t('settings.appearance.sharpButtonCornersDesc')}
                     </div>
                     <Checkbox
                         checked={prefs.globalGlassSurfaces}
                         onChange={(checked) => setGlobalAppearance('globalGlassSurfaces', checked)}
                     >
-                        Glass buttons and containers
+                        {t('settings.appearance.glassButtons')}
                     </Checkbox>
                     <div style={{ color: 'var(--text-muted)', fontSize: '11px', lineHeight: 1.45, marginTop: '-6px' }}>
-                        Applies translucent blur, glass borders, and soft depth to buttons, cards, panels, panes, sidebars, and dialogs globally.
+                        {t('settings.appearance.glassButtonsDesc')}
                     </div>
                 </div>
             </FormGroup>
 
-            <FormGroup label="Wallpaper" icon={<Image size={15} />}>
+            <FormGroup label={t('settings.appearance.wallpaper')} icon={<Image size={15} />}>
                 <div className="settings-card" style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Checkbox checked={prefs.wallpaperEnabled} onChange={setWallpaperEnabled}>Enable wallpaper</Checkbox>
+                    <Checkbox checked={prefs.wallpaperEnabled} onChange={setWallpaperEnabled}>{t('settings.appearance.enableWallpaper')}</Checkbox>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                        <Button icon={<Plus size={16} />} variant="secondary" onClick={addWallpaper}>Add Wallpaper</Button>
+                        <Button icon={<Plus size={16} />} variant="secondary" onClick={addWallpaper}>{t('settings.appearance.addWallpaper')}</Button>
                         {prefs.wallpaperId && (
-                            <Button icon={<Trash2 size={16} />} variant="secondary" onClick={() => removeWallpaper(prefs.wallpaperId)}>Delete Active</Button>
+                            <Button icon={<Trash2 size={16} />} variant="secondary" onClick={() => removeWallpaper(prefs.wallpaperId)}>{t('settings.appearance.deleteActive')}</Button>
                         )}
                     </div>
                     {wallpapers.length > 0 && (
@@ -149,35 +151,35 @@ export function AppearanceSection() {
                         </div>
                     )}
                     <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Opacity ({Math.round(prefs.wallpaperOpacity * 100)}%)</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{t('settings.appearance.opacity', { percent: Math.round(prefs.wallpaperOpacity * 100) })}</div>
                         <Range value={prefs.wallpaperOpacity} min={0} max={1} step={0.01} onChange={(v) => set('wallpaperOpacity', v)} />
                     </div>
-                    <Checkbox checked={prefs.wallpaperVignetteEnabled} onChange={(c) => set('wallpaperVignetteEnabled', c)}>Enable vignette</Checkbox>
+                    <Checkbox checked={prefs.wallpaperVignetteEnabled} onChange={(c) => set('wallpaperVignetteEnabled', c)}>{t('settings.appearance.enableVignette')}</Checkbox>
                     {prefs.wallpaperVignetteEnabled && (
                         <div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Vignette ({Math.round(prefs.wallpaperVignetteStrength * 100)}%)</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{t('settings.appearance.vignette', { percent: Math.round(prefs.wallpaperVignetteStrength * 100) })}</div>
                             <Range value={prefs.wallpaperVignetteStrength} min={0} max={1} step={0.01} onChange={(v) => set('wallpaperVignetteStrength', v)} />
                         </div>
                     )}
                     <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>UI Blur ({prefs.glassBlur}px)</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{t('settings.appearance.uiBlur', { blur: prefs.glassBlur })}</div>
                         <Range value={prefs.glassBlur} min={0} max={24} onChange={onBlur} />
                     </div>
                 </div>
             </FormGroup>
 
-            <FormGroup label="Click Effect" icon={<MousePointerClick size={15} />}>
+            <FormGroup label={t('settings.appearance.clickEffect')} icon={<MousePointerClick size={15} />}>
                 <div className="settings-card" style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Checkbox checked={prefs.clickEffectEnabled} onChange={(c) => set('clickEffectEnabled', c)}>Enable click effect</Checkbox>
+                    <Checkbox checked={prefs.clickEffectEnabled} onChange={(c) => set('clickEffectEnabled', c)}>{t('settings.appearance.enableClickEffect')}</Checkbox>
                     <CustomSelect value={prefs.clickEffectType} onChange={(v) => set('clickEffectType', v)}
                         disabled={!prefs.clickEffectEnabled || prefs.performanceMode}
                         options={CLICK_EFFECT_TYPES.map((t) => ({ value: t.id, label: t.name }))} />
                 </div>
             </FormGroup>
 
-            <FormGroup label="Background Effect" icon={<Sparkles size={15} />}>
+            <FormGroup label={t('settings.appearance.backgroundEffect')} icon={<Sparkles size={15} />}>
                 <div className="settings-card" style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Checkbox checked={prefs.backgroundEffectEnabled} onChange={(c) => set('backgroundEffectEnabled', c)}>Enable background effect</Checkbox>
+                    <Checkbox checked={prefs.backgroundEffectEnabled} onChange={(c) => set('backgroundEffectEnabled', c)}>{t('settings.appearance.enableBackgroundEffect')}</Checkbox>
                     <CustomSelect value={prefs.backgroundEffectType} onChange={(v) => set('backgroundEffectType', v)}
                         disabled={!prefs.backgroundEffectEnabled || prefs.performanceMode}
                         options={BACKGROUND_EFFECT_TYPES.map((t) => ({ value: t.id, label: t.name }))} />

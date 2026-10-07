@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { prettyName } from '../model/categories';
 import type { SchemaEntry } from '../model/emitterSchema';
 import AddFieldMenu from './AddFieldMenu';
+import { useTranslation } from '@/i18n';
 
 /* Bulk-edit toolbar, ported from bineditorV3/components/BulkBar.js. Input state
    (multiplier / set values) lives here; applied ops leave as high-level
@@ -48,10 +49,11 @@ export default function BulkBar({
     onDeleteBulk,
     onAddField,
 }: BulkBarProps) {
+    const { t } = useTranslation();
     const [multiplier, setMultiplier] = useState('2');
     const [setVals, setSetVals] = useState(['0', '0', '0', '0']);
 
-    const label = category === 'all' ? 'all fields' : prettyName(category);
+    const label = category === 'all' ? t('binEditor.allFields') : prettyName(category);
     const fieldChosen = category !== 'all';
     const n = Math.max(1, arity);
 
@@ -94,13 +96,13 @@ export default function BulkBar({
                 style={numInput}
             />
             <button type="button" className="dl-btn dl-btn--primary dl-btn--sm" onClick={applyMultiply}>
-                Apply ×{multiplier} → {label}
+                {t('binEditor.applyMultiplier', { multiplier, label })}
             </button>
 
             {fieldChosen && (
                 <>
                     {divider}
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>set</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('binEditor.set')}</span>
                     {Array.from({ length: n }).map((_, i) => (
                         <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             {n > 1 && (
@@ -118,7 +120,7 @@ export default function BulkBar({
                         </div>
                     ))}
                     <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm" onClick={applySet}>
-                        Set
+                        {t('binEditor.setBtn')}
                     </button>
                 </>
             )}
@@ -132,14 +134,14 @@ export default function BulkBar({
                         onClick={() => onSetFlag(true)}
                         style={{ color: 'var(--color-success)' }}
                     >
-                        Set true
+                        {t('binEditor.setTrue')}
                     </button>
                     <button
                         type="button"
                         className="dl-btn dl-btn--secondary dl-btn--sm"
                         onClick={() => onSetFlag(false)}
                     >
-                        Set false
+                        {t('binEditor.setFalse')}
                     </button>
                 </>
             )}
@@ -154,7 +156,7 @@ export default function BulkBar({
                         onClick={() => onAnimateBulk(true)}
                         style={{ color: 'var(--accent-secondary)' }}
                     >
-                        Animate
+                        {t('binEditor.animate')}
                     </button>
                     <button
                         type="button"
@@ -162,7 +164,7 @@ export default function BulkBar({
                         title={`Make ${label} constant on selected emitters`}
                         onClick={() => onAnimateBulk(false)}
                     >
-                        Constant
+                        {t('binEditor.constant')}
                     </button>
                 </>
             )}
@@ -174,7 +176,7 @@ export default function BulkBar({
                     title={`Delete ${label} from the selected emitters`}
                     onClick={onDeleteBulk}
                 >
-                    Delete
+                    {t('binEditor.delete')}
                 </button>
             )}
 
@@ -189,7 +191,7 @@ export default function BulkBar({
                     fontFamily: 'var(--font-mono)',
                 }}
             >
-                {count.fields} fields · {count.emitters} emitters
+                {t('binEditor.fieldsCount', { fields: count.fields, emitters: count.emitters })}
             </span>
         </div>
     );

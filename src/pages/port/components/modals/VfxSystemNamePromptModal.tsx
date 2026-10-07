@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '@/i18n';
 
 interface VfxSystemNamePromptModalProps {
     open: boolean;
@@ -10,6 +11,7 @@ interface VfxSystemNamePromptModalProps {
 }
 
 export default function VfxSystemNamePromptModal({ open, value, onChange, onClose, onInsert, placeholder = 'Enter a unique name (e.g., testname)' }: VfxSystemNamePromptModalProps) {
+    const { t } = useTranslation();
     if (!open) return null;
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -63,7 +65,7 @@ export default function VfxSystemNamePromptModal({ open, value, onChange, onClos
                 />
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.85rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Name VFX System
+                        {t('port.namePromptModal.title')}
                     </h2>
                     <button
                         onClick={onClose}
@@ -88,7 +90,7 @@ export default function VfxSystemNamePromptModal({ open, value, onChange, onClos
                 <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', padding: 14 }}>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-                            System Name
+                            {t('port.newSystemModal.nameLabel')}
                         </div>
                         <input
                             autoFocus
@@ -128,7 +130,7 @@ export default function VfxSystemNamePromptModal({ open, value, onChange, onClos
                             padding: '10px 24px',
                         }}
                     >
-                        Insert System
+                        {t('port.namePromptModal.insert')}
                     </button>
                 </div>
             </div>

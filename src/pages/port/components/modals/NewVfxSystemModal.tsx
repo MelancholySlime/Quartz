@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '@/i18n';
 
 interface NewVfxSystemModalProps {
     open: boolean;
@@ -9,6 +10,7 @@ interface NewVfxSystemModalProps {
 }
 
 export default function NewVfxSystemModal({ open, onClose, newSystemName, setNewSystemName, onCreate }: NewVfxSystemModalProps) {
+    const { t } = useTranslation();
     if (!open) return null;
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -61,7 +63,7 @@ export default function NewVfxSystemModal({ open, onClose, newSystemName, setNew
                 />
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.95rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        New VFX System
+                        {t('port.newSystemModal.title')}
                     </h2>
                     <button
                         onClick={onClose}
@@ -86,7 +88,7 @@ export default function NewVfxSystemModal({ open, onClose, newSystemName, setNew
                 <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', padding: 14 }}>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-secondary)', marginBottom: 10 }}>
-                            System Name
+                            {t('port.newSystemModal.nameLabel')}
                         </div>
                         <input
                             autoFocus
@@ -117,7 +119,7 @@ export default function NewVfxSystemModal({ open, onClose, newSystemName, setNew
                         onClick={onCreate}
                         style={{ ...btnBase, background: 'color-mix(in oklab, var(--accent-secondary) 10%, transparent)', border: '1px solid color-mix(in oklab, var(--accent-secondary) 35%, transparent)', color: 'var(--accent-secondary)' }}
                     >
-                        Create
+                        {t('port.newSystemModal.create')}
                     </button>
                 </div>
             </div>

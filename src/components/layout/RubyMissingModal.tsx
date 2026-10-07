@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useTranslation } from '@/i18n';
 
 export const RUBY_DOWNLOAD_URL = 'https://github.com/RitoShark/RubyVFX/releases/latest';
 
@@ -11,6 +12,7 @@ interface Props {
 /* Shown when the Ruby hand-off finds no installation: explains what RubyRe is and
    links its releases, rather than surfacing a raw launch failure. */
 export function RubyMissingModal({ open, onClose }: Props) {
+    const { t } = useTranslation();
     if (!open) return null;
 
     return (
@@ -23,25 +25,23 @@ export function RubyMissingModal({ open, onClose }: Props) {
 
                 <div className="dl-modal__head">
                     <img src="/ruby.png" alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
-                    <h2 className="dl-modal__title">RubyRe is not installed</h2>
-                    <button className="dl-modal__close" onClick={onClose} aria-label="Close">✕</button>
+                    <h2 className="dl-modal__title">{t('ruby.title')}</h2>
+                    <button className="dl-modal__close" onClick={onClose} aria-label={t('common.close')}>✕</button>
                 </div>
 
                 <div className="dl-modal__body">
                     <p style={{ margin: 0, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, fontSize: '0.9rem' }}>
-                        RubyRe is a live VFX previewer for League bins: it renders a skin's
-                        particle systems in real time, so you can see an edit as you make it.
+                        {t('ruby.desc1')}
                     </p>
                     <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, fontSize: '0.82rem' }}>
-                        Quartz looks for it in the Windows Start menu. Install it, or set a
-                        portable path in Settings &gt; External Tools, and this button starts working.
+                        {t('ruby.desc2')}
                     </p>
                 </div>
 
                 <div className="dl-modal__foot">
                     <button className="dl-btn dl-btn--primary" onClick={() => void openUrl(RUBY_DOWNLOAD_URL)}>
                         <span className="dl-icon"><ExternalLink size={16} /></span>
-                        <span>Download RubyRe</span>
+                        <span>{t('ruby.download')}</span>
                     </button>
                 </div>
             </div>

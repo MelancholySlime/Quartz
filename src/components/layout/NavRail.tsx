@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useNavigationStore, useUiPrefsStore, type Page } from '@/lib/stores';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useTranslation } from '@/i18n';
 
 // Paint and Port always appear, like the original Quartz nav.
 export const ALWAYS_VISIBLE: Page[] = ['paint', 'port'];
@@ -44,15 +45,17 @@ export function visibleNavItems(pageVisibility: Partial<Record<Page, boolean>>):
 }
 
 function NavBtn({ item }: { item: NavItem }) {
+    const { t } = useTranslation();
     const page = useNavigationStore((s) => s.page);
     const setPage = useNavigationStore((s) => s.setPage);
     const Icon = item.icon;
+    const label = t(`nav.${item.id}` as any) || item.label;
     return (
-        <Tooltip content={item.label} side="right">
+        <Tooltip content={label} side="right">
             <button
                 type="button"
                 className={`q-navbtn ${page === item.id ? 'is-active' : ''}`}
-                aria-label={item.label}
+                aria-label={label}
                 onClick={() => setPage(item.id)}
             >
                 <Icon size={21} />

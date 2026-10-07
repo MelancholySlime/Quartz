@@ -1,4 +1,5 @@
 import type { SelectedSkin } from '../types';
+import { useTranslation } from '@/i18n';
 
 interface Props {
     selectedSkins: SelectedSkin[];
@@ -26,6 +27,7 @@ export function SelectionActionBar({
     onRepath,
     onClearAll,
 }: Props) {
+    const { t } = useTranslation();
     const hasSelection = selectedSkins.length > 0;
     const busy = isExtracting || isRepathing || isPreviewing;
     const disabledAction = busy || !isSetupValid || !hasSelection;
@@ -33,9 +35,9 @@ export function SelectionActionBar({
        selected reads as a broken button, and the missing setup is on a
        different page, so there is nothing on screen to connect it to. */
     const blockedReason = !isSetupValid
-        ? 'Set the League folder and an output folder in Settings first'
+        ? t('assetExtractorPage.actionBar.setupMissing')
         : !hasSelection
-          ? 'Select at least one skin'
+          ? t('assetExtractorPage.actionBar.selectSkinDesc')
           : '';
     const names = selectedSkins
         .map((s) => `${s.name}${s.champion?.name ? ` (${s.champion.name})` : ''}`)
@@ -44,10 +46,10 @@ export function SelectionActionBar({
     return (
         <div className="ae-bottom-bar">
             <div className="ae-bottom-bar__group">
-                <span className="dl-badge"><span className="dl-badge__dot" />{selectedSkins.length} selected</span>
+                <span className="dl-badge"><span className="dl-badge__dot" />{t('assetExtractorPage.actionBar.selected', { count: selectedSkins.length })}</span>
                 {hasSelection
                     ? <span className="ae-bottom-bar__names" title={names}>{names}</span>
-                    : <span className="ae-bottom-bar__names" style={{ color: 'var(--text-muted)' }}>No skins selected</span>}
+                    : <span className="ae-bottom-bar__names" style={{ color: 'var(--text-muted)' }}>{t('assetExtractorPage.actionBar.noSkinsSelected')}</span>}
             </div>
 
             {statusMessage
@@ -59,20 +61,20 @@ export function SelectionActionBar({
                     className="dl-btn dl-btn--sm ae-extract-btn"
                     onClick={onExtract}
                     disabled={disabledAction}
-                    title={blockedReason || 'Extract the selected skin files'}
+                    title={blockedReason || t('assetExtractorPage.actionBar.extractTooltip')}
                 >
-                    {isExtracting ? 'Extracting...' : 'Extract'}
+                    {isExtracting ? t('assetExtractorPage.actionBar.extracting') : t('assetExtractorPage.actionBar.extract')}
                 </button>
                 <button
                     className="dl-btn dl-btn--sm dl-btn--primary"
                     onClick={onRepath}
                     disabled={disabledAction}
-                    title={blockedReason || 'Extract, combine, and repath into an installable mod'}
+                    title={blockedReason || t('assetExtractorPage.actionBar.repathTooltip')}
                 >
-                    {isRepathing ? 'Repathing...' : 'Repath'}
+                    {isRepathing ? t('assetExtractorPage.actionBar.repathing') : t('assetExtractorPage.actionBar.repath')}
                 </button>
                 <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={onClearAll} disabled={busy || !hasSelection}>
-                    Clear All
+                    {t('assetExtractorPage.actionBar.clearAll')}
                 </button>
             </div>
         </div>

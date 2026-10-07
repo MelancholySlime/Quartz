@@ -1,6 +1,8 @@
 import { Hammer } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 
 export function Placeholder({ title }: { title: string }) {
+    const { t } = useTranslation();
     return (
         <div className="grid h-full place-items-center">
             <div className="q-glass flex flex-col items-center gap-3 px-10 py-12 text-center">
@@ -12,7 +14,7 @@ export function Placeholder({ title }: { title: string }) {
                 </div>
                 <h1 className="text-xl font-semibold text-white/90">{title}</h1>
                 <p className="max-w-xs text-sm text-white/40">
-                    This tool isn't ported yet. The UI and backend land in an upcoming phase.
+                    {t('placeholder.notPorted')}
                 </p>
             </div>
         </div>

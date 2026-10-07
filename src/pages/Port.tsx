@@ -46,8 +46,10 @@ import ClipList from './port/anm/components/ClipList';
 import { AnmEditProvider } from './port/anm/components/AnmEditContext';
 import { filterClips } from './port/anm/filterClips';
 import type { PortClipResult } from '@/lib/api/vfxAnm';
+import { useTranslation } from '@/i18n';
 
 function Port() {
+    const { t } = useTranslation();
     const p = usePort();
 
     /* Animation view. Reads the SAME resident sessions Port already holds - the
@@ -726,7 +728,7 @@ function Port() {
             ? [{
                 id: 'portAll',
                 color: 'var(--accent-primary)',
-                title: p.isPortAllLoading ? 'Porting…' : 'Port All VFX Systems',
+                title: p.isPortAllLoading ? t('port.actions.porting') : t('port.actions.portAll'),
                 icon: <ArrowBackIcon sx={{ fontSize: 16 }} />,
                 onClick: () => setShowPortAllModeModal(true),
                 disabled: portAllDisabled,
@@ -735,7 +737,7 @@ function Port() {
         {
             id: 'newSystem',
             color: 'var(--color-warning)',
-            title: nDis ? 'New VFX System (needs ResourceResolver)' : 'New VFX System',
+            title: nDis ? t('port.actions.newVfxSystemNeedsResolver') : t('port.actions.newVfxSystem'),
             icon: <AddIcon sx={{ fontSize: 18 }} />,
             onClick: p.handleOpenNewSystemModal,
             disabled: nDis,
@@ -743,7 +745,7 @@ function Port() {
         {
             id: 'persistent',
             color: 'var(--color-success)',
-            title: pDis ? 'Persistent Effects (needs ResourceResolver + SkinData)' : 'Persistent Effects',
+            title: pDis ? t('port.actions.persistentEffectsDisabled') : t('port.actions.persistentEffects'),
             icon: <AppsIcon sx={{ fontSize: 16 }} />,
             onClick: p.handleOpenPersistent,
             disabled: pDis,
@@ -751,7 +753,7 @@ function Port() {
         {
             id: 'idleParticles',
             color: 'var(--color-info)',
-            title: pDis ? 'Idle Particles (needs ResourceResolver + SkinData)' : 'Idle Particles',
+            title: pDis ? t('port.actions.idleParticlesDisabled') : t('port.actions.idleParticles'),
             icon: <BubbleChartIcon sx={{ fontSize: 16 }} />,
             onClick: handleOpenIdleManager,
             disabled: pDis,
@@ -759,7 +761,7 @@ function Port() {
         {
             id: 'backup',
             color: 'var(--accent-secondary)',
-            title: 'Backup History',
+            title: t('port.actions.backupHistory'),
             icon: <FolderIcon sx={{ fontSize: 16 }} />,
             onClick: handleOpenBackupViewer,
         },
@@ -773,6 +775,7 @@ function Port() {
         p.handleOpenPersistent,
         handleOpenIdleManager,
         handleOpenBackupViewer,
+        t,
     ]);
 
     return (

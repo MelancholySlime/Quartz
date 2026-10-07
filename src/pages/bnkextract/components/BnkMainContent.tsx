@@ -1,10 +1,13 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { Box, CircularProgress, Typography, Divider, Slider } from '@mui/material';
+import { useTranslation } from '@/i18n';
 
 /* Small pane-local parsing indicator. Sits inside the pane's Box (which is
    position:relative) so it centres over the tree area without blurring the
    rest of the window — the old full-window Backdrop was doing that. */
-function PaneParsingIndicator({ label = 'Parsing…' }: { label?: string }) {
+function PaneParsingIndicator({ label }: { label?: string }) {
+    const { t } = useTranslation();
+    const displayLabel = label ?? t('soundbanks.parsing');
     return (
         <Box
             sx={{
@@ -16,7 +19,7 @@ function PaneParsingIndicator({ label = 'Parsing…' }: { label?: string }) {
             }}
         >
             <CircularProgress size={32} sx={{ color: 'var(--accent-primary)' }} />
-            <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--text-primary)' }}>{label}</Typography>
+            <Typography sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--text-primary)' }}>{displayLabel}</Typography>
         </Box>
     );
 }
@@ -213,6 +216,7 @@ interface Props {
 }
 
 export default function BnkMainContent(props: Props) {
+    const { t } = useTranslation();
     const {
         mainContentStyle, treeViewStyle, sidebarStyle,
         viewMode, activePane, setActivePane,
@@ -286,20 +290,20 @@ export default function BnkMainContent(props: Props) {
                             <button
                                 className="dl-btn dl-btn--secondary dl-btn--icon"
                                 onClick={() => setAddFilesPane('left')}
-                                title="Add more files to Main bank"
+                                title={t('soundbanks.addFilesTip')}
                             >
                                 <FolderOpen sx={{ fontSize: 16 }} />
                             </button>
                             <SearchInput
                                 initialValue={leftSearchQuery}
-                                placeholder="Filter by name"
+                                placeholder={t('soundbanks.filterByName')}
                                 onChange={setLeftSearchQuery}
                                 trailing={(
                                     <button
                                         type="button"
                                         className={`bnk-search-sort${leftSortMode !== 'none' ? ' is-active' : ''}`}
                                         onClick={() => setLeftSortMode((prev) => prev === 'none' ? 'name-asc' : (prev === 'name-asc' ? 'name-desc' : 'none'))}
-                                        title={`Sort alphabetically: ${leftSortMode === 'none' ? 'Off' : (leftSortMode === 'name-asc' ? 'A to Z' : 'Z to A')}`}
+                                        title={`Sort alphabetically: ${leftSortMode === 'none' ? t('soundbanks.sortOff') : (leftSortMode === 'name-asc' ? t('soundbanks.sortAtoZ') : t('soundbanks.sortZtoA'))}`}
                                     >
                                         <SortByAlpha sx={{ fontSize: 15, transform: leftSortMode === 'name-desc' ? 'scaleY(-1)' : 'none' }} />
                                     </button>
@@ -321,12 +325,12 @@ export default function BnkMainContent(props: Props) {
                             onMoveIntoGroup={handleMoveIntoGroup}
                             onExternalFileDrop={handleExternalFileDrop}
                             pane="left"
-                            emptyText={leftSearchQuery ? 'No matches' : 'Drag & drop a mod folder here'}
+                            emptyText={leftSearchQuery ? t('soundbanks.noMatches') : t('soundbanks.dropModOrAudio')}
                         />
                     </>
                 ) : null}
 
-                {leftDragOver && <DropOverlay label="Drop a mod folder to load" />}
+                {leftDragOver && <DropOverlay label={t('soundbanks.dropModOrAudio')} />}
                 {parsingPane === 'left' && <PaneParsingIndicator />}
             </Box>
 
@@ -371,20 +375,20 @@ export default function BnkMainContent(props: Props) {
                                 <button
                                     className="dl-btn dl-btn--secondary dl-btn--icon"
                                     onClick={() => setAddFilesPane('right')}
-                                    title="Add more files to Reference bank"
+                                    title={t('soundbanks.addFilesTip')}
                                 >
                                     <FolderOpen sx={{ fontSize: 16 }} />
                                 </button>
                                 <SearchInput
                                     initialValue={rightSearchQuery}
-                                    placeholder="Filter by name"
+                                    placeholder={t('soundbanks.filterByName')}
                                     onChange={setRightSearchQuery}
                                     trailing={(
                                         <button
                                             type="button"
                                             className={`bnk-search-sort${rightSortMode !== 'none' ? ' is-active' : ''}`}
                                             onClick={() => setRightSortMode((prev) => prev === 'none' ? 'name-asc' : (prev === 'name-asc' ? 'name-desc' : 'none'))}
-                                            title={`Sort alphabetically: ${rightSortMode === 'none' ? 'Off' : (rightSortMode === 'name-asc' ? 'A to Z' : 'Z to A')}`}
+                                            title={`Sort alphabetically: ${rightSortMode === 'none' ? t('soundbanks.sortOff') : (rightSortMode === 'name-asc' ? t('soundbanks.sortAtoZ') : t('soundbanks.sortZtoA'))}`}
                                         >
                                             <SortByAlpha sx={{ fontSize: 15, transform: rightSortMode === 'name-desc' ? 'scaleY(-1)' : 'none' }} />
                                         </button>
@@ -406,12 +410,12 @@ export default function BnkMainContent(props: Props) {
                             onMoveIntoGroup={handleMoveIntoGroup}
                                 onExternalFileDrop={handleExternalFileDrop}
                                 pane="right"
-                                emptyText={rightSearchQuery ? 'No matches' : 'Drop .wem .wav .mp3 files here, autoconvert or load banks to drag replacement audio'}
+                                emptyText={rightSearchQuery ? t('soundbanks.noMatches') : t('soundbanks.dropModOrAudio')}
                             />
                         </>
                     ) : null}
 
-                    {rightPaneDragOver && <DropOverlay label="Drop .wem / .wav / .mp3 to import" />}
+                    {rightPaneDragOver && <DropOverlay label={t('soundbanks.dropToImport')} />}
                     {parsingPane === 'right' && <PaneParsingIndicator />}
                 </Box>
             )}
@@ -441,7 +445,6 @@ export default function BnkMainContent(props: Props) {
                                         py: '5px',
                                         cursor: 'pointer',
                                         borderRadius: '4px',
-                                        // Active segment = the translucent "Open Bin" (dl-btn--primary) look.
                                         background: isActive ? 'color-mix(in oklab, var(--accent-primary) 16%, var(--bg-secondary))' : 'transparent',
                                         border: isActive ? '1px solid color-mix(in oklab, var(--accent-primary) 45%, var(--border))' : '1px solid transparent',
                                         color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
@@ -449,7 +452,7 @@ export default function BnkMainContent(props: Props) {
                                         '&:hover': { color: isActive ? 'var(--accent-primary)' : 'var(--text-primary)' },
                                     }}
                                 >
-                                    {p === 'left' ? 'MAIN' : 'REFERENCE'}
+                                    {p === 'left' ? t('soundbanks.mainPane') : t('soundbanks.referencePane')}
                                 </Box>
                             );
                         })}
@@ -458,11 +461,11 @@ export default function BnkMainContent(props: Props) {
 
                 <button className="dl-btn dl-btn--primary" onClick={handleExtract} disabled={selectedNodes.size === 0}>
                     <span className="dl-icon"><Download sx={{ fontSize: 12 }} /></span>
-                    <span>Extract</span>
+                    <span>{t('soundbanks.extract')}</span>
                 </button>
                 <button className="dl-btn dl-btn--secondary" onClick={handleReplace} disabled={!hasAudioSelection()}>
                     <span className="dl-icon"><Upload sx={{ fontSize: 12 }} /></span>
-                    <span>Replace</span>
+                    <span>{t('soundbanks.replace')}</span>
                 </button>
                 <button
                     className="dl-btn dl-btn--secondary"
@@ -470,29 +473,29 @@ export default function BnkMainContent(props: Props) {
                     disabled={!treeData.length || !rightTreeData.length}
                 >
                     <span className="dl-icon"><AutoFixHigh sx={{ fontSize: 12 }} /></span>
-                    <span>Auto Match Names</span>
+                    <span>{t('soundbanks.autoMatchNames')}</span>
                 </button>
                 <button className="dl-btn dl-btn--secondary" onClick={handleMakeSilent} disabled={!hasAudioSelection()}>
                     <span className="dl-icon"><VolumeOff sx={{ fontSize: 12 }} /></span>
-                    <span>Make Silent</span>
+                    <span>{t('soundbanks.makeSilent')}</span>
                 </button>
 
                 <Divider sx={{ borderColor: 'var(--border)', margin: '0.25rem 0' }} />
 
                 <button className="dl-btn dl-btn--secondary" onClick={handleSave} disabled={!hasRootSelection()}>
                     <span className="dl-icon"><Save sx={{ fontSize: 12 }} /></span>
-                    <span>Save as BNK/WPK</span>
+                    <span>{t('soundbanks.saveBnkWpk')}</span>
                 </button>
 
                 <Divider sx={{ borderColor: 'var(--border)', margin: '0.25rem 0' }} />
 
                 <button className="dl-btn dl-btn--primary" onClick={handlePlaySelected} disabled={!hasAudioSelection()}>
                     <span className="dl-icon"><PlayArrow sx={{ fontSize: 12 }} /></span>
-                    <span>Play</span>
+                    <span>{t('soundbanks.play')}</span>
                 </button>
                 <button className="dl-btn dl-btn--secondary" onClick={stopAudio}>
                     <span className="dl-icon"><Stop sx={{ fontSize: 12 }} /></span>
-                    <span>Stop</span>
+                    <span>{t('soundbanks.stop')}</span>
                 </button>
 
                 <Box sx={{ mt: 'auto', pt: 2 }}>
@@ -517,14 +520,14 @@ export default function BnkMainContent(props: Props) {
                         />
                     </Box>
                     <Typography sx={{ fontSize: '0.6rem', opacity: 0.4, textAlign: 'center', mt: 0.5 }}>
-                        Volume: {volume}%
+                        {t('soundbanks.volume')}: {volume}%
                     </Typography>
                 </Box>
 
                 <Divider sx={{ borderColor: 'var(--border)', margin: '0.25rem 0' }} />
                 <button className="dl-btn dl-btn--secondary" onClick={() => setShowSettingsModal(true)}>
                     <span className="dl-icon"><Settings sx={{ fontSize: 12 }} /></span>
-                    <span>Settings</span>
+                    <span>{t('soundbanks.settings')}</span>
                 </button>
             </Box>
 

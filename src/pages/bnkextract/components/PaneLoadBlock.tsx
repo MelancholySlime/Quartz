@@ -2,6 +2,7 @@ import { Box, Typography } from '@mui/material';
 import { FolderOpen, Refresh } from '@mui/icons-material';
 import type { Pane } from '../types';
 import type { PathSet } from '../../BnkExtract';
+import { useTranslation } from '@/i18n';
 
 interface Props {
     pane: Pane;
@@ -12,16 +13,16 @@ interface Props {
     isLoading: boolean;
 }
 
-const FIELDS: { kind: keyof PathSet; label: string; tip: string }[] = [
-    { kind: 'bin', label: 'BIN File (Names)', tip: 'Select BIN File (Event Names)' },
-    { kind: 'wpk', label: 'Audio File (WPK/BNK)', tip: 'Select Audio File (.wpk/.bnk)' },
-    { kind: 'bnk', label: 'Events File (BNK)', tip: 'Select BNK File (Events Structure)' },
-];
-
 /* Port-style empty-pane loader: centered file pickers + Parse. Rendered only
    while the pane's tree is empty; disappears once content is loaded. Each pane
    parses its own BIN/Audio/Events triple independently. */
 export default function PaneLoadBlock({ pane, paths, onSelectFile, onSetPath, onParse, isLoading }: Props) {
+    const { t } = useTranslation();
+    const FIELDS: { kind: keyof PathSet; label: string; tip: string }[] = [
+        { kind: 'bin', label: t('soundbanks.binFileLabel'), tip: t('soundbanks.binFileTip') },
+        { kind: 'wpk', label: t('soundbanks.audioFileLabel'), tip: t('soundbanks.audioFileTip') },
+        { kind: 'bnk', label: t('soundbanks.eventsFileLabel'), tip: t('soundbanks.eventsFileTip') },
+    ];
     const canParse = !isLoading && (!!paths.wpk || !!paths.bnk);
     return (
         <Box sx={{
@@ -36,7 +37,7 @@ export default function PaneLoadBlock({ pane, paths, onSelectFile, onSetPath, on
         }}>
             <FolderOpen sx={{ fontSize: 40, color: 'var(--accent-primary)', opacity: 0.8 }} />
             <Typography sx={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                Select files and <b style={{ color: 'var(--text-primary)' }}>Parse</b>, or drag &amp; drop a mod folder here
+                {t('soundbanks.emptyTitle')}
             </Typography>
 
             <Box sx={{ width: 'min(360px, 92%)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -65,7 +66,7 @@ export default function PaneLoadBlock({ pane, paths, onSelectFile, onSetPath, on
                     disabled={!canParse}
                 >
                     <span className="dl-icon"><Refresh sx={{ fontSize: 14 }} /></span>
-                    <span>Parse</span>
+                    <span>{isLoading ? t('soundbanks.parsing') : t('soundbanks.parseBtn')}</span>
                 </button>
             </Box>
         </Box>

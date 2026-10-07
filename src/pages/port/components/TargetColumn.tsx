@@ -9,6 +9,7 @@ import { DropOverlay } from '@/components/ui';
 import { usePortDropZone, type PortDragPayload } from '../usePortDrag';
 import type { VfxSystem, VfxSystemMap } from '../model';
 import type { ListSharedProps } from './ParticleSystemList/types';
+import { useTranslation } from '@/i18n';
 
 interface TargetColumnProps extends ListSharedProps {
     isProcessing: boolean;
@@ -36,6 +37,7 @@ interface TargetColumnProps extends ListSharedProps {
 }
 
 export default function TargetColumn(props: TargetColumnProps) {
+    const { t } = useTranslation();
     const {
         anmSlot,
         isProcessing,
@@ -102,7 +104,7 @@ export default function TargetColumn(props: TargetColumnProps) {
             style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', borderRadius: '8px' }}
             {...fileDrop.handlers}
         >
-            {fileDrop.isOver && <DropOverlay label="Drop .bin or .py to load as Target" />}
+            {fileDrop.isOver && <DropOverlay label={t('port.dropTargetBin')} />}
             {/* One row: open + filter (mirrors Donor). Emitter + texture search
                is always on. */}
             <div className="port-toolbar-row">
@@ -110,7 +112,7 @@ export default function TargetColumn(props: TargetColumnProps) {
                     className="dl-btn dl-btn--secondary dl-btn--icon"
                     onClick={handleOpenTargetBin}
                     disabled={isProcessing}
-                    title={isProcessing ? 'Processing...' : 'Open Target Bin'}
+                    title={isProcessing ? 'Processing...' : t('port.openBin')}
                 >
                     <FolderOpenIcon size={16} />
                 </button>
@@ -123,14 +125,14 @@ export default function TargetColumn(props: TargetColumnProps) {
                 >
                     <SearchInput
                         initialValue={targetFilterInput}
-                        placeholder={anmSlot ? 'Filter by Clip, Anm or Event' : 'Filter by Particle or Emitter'}
+                        placeholder={anmSlot ? t('port.filterAnmTarget') : t('port.filterTargetPlaceholder')}
                         onChange={filterTargetParticles}
                         trailing={
                             <button
                                 type="button"
                                 className={`port-search-scissor${trimTargetNames ? ' is-active' : ''}`}
                                 onClick={() => setTrimTargetNames(!trimTargetNames)}
-                                title={trimTargetNames ? 'Show full target names' : 'Trim target names'}
+                                title={trimTargetNames ? t('port.showFullTargetTip') : t('port.trimTargetTip')}
                             >
                                 <ScissorsIcon size={15} />
                             </button>
@@ -162,7 +164,7 @@ export default function TargetColumn(props: TargetColumnProps) {
                 onDragLeave={handleTargetDropDragLeave}
                 onDrop={(e) => processVfxSystemDrop(e, 'target container')}
             >
-                {isDragOverVfx && <DropOverlay label="Drop to add VFX system" />}
+                {isDragOverVfx && <DropOverlay label={t('port.dropToAddVfx')} />}
                 {binLoading ? (
                     <PortSystemSkeleton isTarget />
                 ) : anmSlot || Object.keys(safeTargetSystems).length > 0 ? (
@@ -195,11 +197,11 @@ export default function TargetColumn(props: TargetColumnProps) {
                         }}>
                             <FolderOpenIcon size={36} color="var(--accent-primary)" strokeWidth={1.5} />
                             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                                Drag Target <b style={{ color: 'var(--text-primary)' }}>.bin</b> here
+                                {t('port.dragTargetBin')}
                             </div>
                             <button onClick={handleOpenTargetBin} disabled={isProcessing} className="dl-btn dl-btn--primary dl-btn--sm">
                                 <span className="dl-icon"><FolderOpenIcon size={14} /></span>
-                                <span>Open Bin</span>
+                                <span>{t('port.openBin')}</span>
                             </button>
                         </div>
                         <PortRecentBins slot="target" onOpen={processTargetBin} />

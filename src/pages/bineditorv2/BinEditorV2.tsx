@@ -36,6 +36,7 @@ import { buildFieldValue, type SchemaEntry } from './model/emitterSchema';
 import { applyValueToNode, collectTextures, defaultListItem, emitterId, entryKey, fieldByKey, pathKey } from './model/nodes';
 import './BinEditorV2.css';
 import { useJadeBin } from '@/lib/jade/jadeInterop';
+import { useTranslation } from '@/i18n';
 
 /* Bin Editor V2 — dynamic VFX bin editor over the native Rust bin session.
    Port of the Electron BinEditorV3 container: same state orchestration
@@ -45,6 +46,7 @@ import { useJadeBin } from '@/lib/jade/jadeInterop';
 const DROP_RE = /\.(bin|py|ritobin)$/i;
 
 function BinEditorV2() {
+    const { t } = useTranslation();
     const pick = useFileExplorer();
     const page = useNavigationStore((s) => s.page);
     const notify = useNotificationStore((s) => s.push);
@@ -808,7 +810,7 @@ function BinEditorV2() {
     return (
         <div className="bineditorv2-root">
             {isDragOver && (
-                <DropOverlay variant="scrim" label="Drop the bin here" icon={<FolderOpenIcon size={48} strokeWidth={1.5} />} />
+                <DropOverlay variant="scrim" label={t('binEditor.dropBinHere')} icon={<FolderOpenIcon size={48} strokeWidth={1.5} />} />
             )}
 
             <div className="bineditorv2-body">
@@ -834,8 +836,8 @@ function BinEditorV2() {
                                     strokeWidth={1.5}
                                     style={{ display: 'block', marginBottom: 16 }}
                                 />
-                                <div className="bineditorv2-empty__title">No Bin Loaded</div>
-                                <div className="bineditorv2-empty__sub">Drop a .bin here</div>
+                                <div className="bineditorv2-empty__title">{t('binEditor.emptyTitle')}</div>
+                                <div className="bineditorv2-empty__sub">{t('binEditor.emptySub')}</div>
                                 <button
                                     type="button"
                                     className="dl-btn dl-btn--primary"
@@ -843,7 +845,7 @@ function BinEditorV2() {
                                     onClick={() => void handleFileOpen()}
                                 >
                                     <span className="dl-icon"><FolderOpenIcon size={14} /></span>
-                                    <span>Open Bin</span>
+                                    <span>{t('binEditor.openBin')}</span>
                                 </button>
                             </div>
 
@@ -852,7 +854,7 @@ function BinEditorV2() {
                     )}
 
                     {model && selectedSystems.size === 0 && (
-                        <div className="bineditorv2-hint">Select a system on the left</div>
+                        <div className="bineditorv2-hint">{t('binEditor.selectSystemHint')}</div>
                     )}
 
                     {model && selectedSystems.size > 0 && (
@@ -879,17 +881,17 @@ function BinEditorV2() {
                             <div className="bineditorv2-minirow">
                                 {selectedSystemList.length === 1 && (
                                     <>
-                                        <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm" onClick={() => setCreateIntent({ kind: 'emitter', system: selectedSystemList[0] })}>+ Emitter</button>
-                                        <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm" onClick={() => setCreateIntent({ kind: 'child', system: selectedSystemList[0] })}>+ Child particle</button>
+                                        <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm" onClick={() => setCreateIntent({ kind: 'emitter', system: selectedSystemList[0] })}>{t('binEditor.addEmitterBtn')}</button>
+                                        <button type="button" className="dl-btn dl-btn--secondary dl-btn--sm" onClick={() => setCreateIntent({ kind: 'child', system: selectedSystemList[0] })}>{t('binEditor.addChildParticleBtn')}</button>
                                     </>
                                 )}
                                 <button type="button" className="dl-btn dl-btn--ghost dl-btn--sm" onClick={selectAllEmitters}>
-                                    Select all
+                                    {t('binEditor.selectAll')}
                                 </button>
                                 <button type="button" className="dl-btn dl-btn--ghost dl-btn--sm" onClick={deselectAllEmitters}>
-                                    Deselect all
+                                    {t('binEditor.deselectAll')}
                                 </button>
-                                <span className="bineditorv2-minirow__count">{checkedEmitters.size} selected</span>
+                                <span className="bineditorv2-minirow__count">{t('binEditor.selectedCount', { count: checkedEmitters.size })}</span>
                             </div>
                             <div className="bineditorv2-main__scroll">
                                 {selectedSystemList.map((sys) => (
@@ -944,7 +946,7 @@ function BinEditorV2() {
                     <button
                         type="button"
                         className="dl-btn dl-btn--primary dl-btn--sm dl-btn--icon"
-                        title="Open Bin"
+                        title={t('binEditor.openBin')}
                         disabled={busy}
                         onClick={() => void handleFileOpen()}
                     >
@@ -952,17 +954,17 @@ function BinEditorV2() {
                     </button>
                 )}
                 {status && <span className="bineditorv2-status">{status}</span>}
-                {dirty && <span className="bineditorv2-unsaved">Unsaved</span>}
+                {dirty && <span className="bineditorv2-unsaved">{t('binEditor.unsaved')}</span>}
                 <label className="bineditorv2-advanced">
                     <Switch checked={advanced} onChange={setAdvanced} />
-                    <span>Advanced</span>
+                    <span>{t('binEditor.advanced')}</span>
                 </label>
 
                 <div className="bineditorv2-footer__actions">
                     <button
                         type="button"
                         className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
-                        title="Undo"
+                        title={t('binEditor.undo')}
                         disabled={!canUndo}
                         onClick={() => void handleUndo()}
                     >
@@ -971,7 +973,7 @@ function BinEditorV2() {
                     <button
                         type="button"
                         className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
-                        title="Redo"
+                        title={t('binEditor.redo')}
                         disabled={!canRedo}
                         onClick={() => void handleRedo()}
                     >
@@ -980,11 +982,11 @@ function BinEditorV2() {
                     <button
                         type="button"
                         className="dl-btn dl-btn--secondary dl-btn--sm"
-                        title="Reset the tree to its state at load"
+                        title={t('binEditor.restoreTooltip')}
                         disabled={noDoc || busy}
                         onClick={() => void handleRestore()}
                     >
-                        Restore
+                        {t('binEditor.restore')}
                     </button>
                     <button
                         type="button"
@@ -992,7 +994,7 @@ function BinEditorV2() {
                         disabled={!dirty || busy}
                         onClick={() => void handleSave()}
                     >
-                        Save
+                        {t('binEditor.save')}
                     </button>
                 </div>
             </div>

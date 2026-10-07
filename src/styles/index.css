@@ -19,7 +19,7 @@ html, body, #app { height: 100%; margin: 0; }
 body {
     background: var(--bg);
     color: var(--text);
-    font-family: var(--app-font, var(--font-sans, 'Segoe UI', system-ui, -apple-system, sans-serif));
+    font-family: var(--app-font, var(--font-sans, 'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif));
     overflow: hidden;
 }
 

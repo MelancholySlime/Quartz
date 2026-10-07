@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { BookOpen, Search, Settings, X } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 
 function ModalShell({ title, icon, onClose, children, footer }: {
     title: string;
@@ -24,18 +25,19 @@ export function WadSettingsModal({ values, onChange, onClose }: {
     onChange: (values: { rowHeight: number; fontSize: number; iconSize: number }) => void;
     onClose: () => void;
 }) {
+    const { t } = useTranslation();
     const update = (key: keyof typeof values, value: number) => onChange({ ...values, [key]: value });
     return (
         <ModalShell
-            title="WAD Explorer Settings"
+            title={t('wadExplorerPage.modals.settings.title')}
             icon={<Settings size={17} />}
             onClose={onClose}
-            footer={<button className="dl-btn dl-btn--primary" onClick={onClose}>Done</button>}
+            footer={<button className="dl-btn dl-btn--primary" onClick={onClose}>{t('wadExplorerPage.modals.settings.done')}</button>}
         >
-            <p className="wad-modal__intro">Tune the archive tree without changing the rest of Quartz.</p>
-            <RangeRow label="Row height" value={values.rowHeight} min={20} max={34} suffix="px" onChange={(value) => update('rowHeight', value)} />
-            <RangeRow label="Text size" value={values.fontSize} min={11} max={15} suffix="px" onChange={(value) => update('fontSize', value)} />
-            <RangeRow label="Icon size" value={values.iconSize} min={10} max={18} suffix="px" onChange={(value) => update('iconSize', value)} />
+            <p className="wad-modal__intro">{t('wadExplorerPage.modals.settings.intro')}</p>
+            <RangeRow label={t('wadExplorerPage.modals.settings.rowHeight')} value={values.rowHeight} min={20} max={34} suffix="px" onChange={(value) => update('rowHeight', value)} />
+            <RangeRow label={t('wadExplorerPage.modals.settings.textSize')} value={values.fontSize} min={11} max={15} suffix="px" onChange={(value) => update('fontSize', value)} />
+            <RangeRow label={t('wadExplorerPage.modals.settings.iconSize')} value={values.iconSize} min={10} max={18} suffix="px" onChange={(value) => update('iconSize', value)} />
             <div className="wad-settings-preview" style={{ fontSize: values.fontSize, minHeight: values.rowHeight }}>
                 <span style={{ width: values.iconSize, height: values.iconSize }} />
                 data / characters / champion / skins / skin01
@@ -187,6 +189,7 @@ export function WadCheatSheet({ onSearch, onShowWad, onClose }: {
     onShowWad: (wad: string, path?: string) => void;
     onClose: () => void;
 }) {
+    const { t } = useTranslation();
     const [filter, setFilter] = useState('');
     const filtered = useMemo(() => {
         const needle = filter.trim().toLowerCase();
@@ -200,13 +203,13 @@ export function WadCheatSheet({ onSearch, onShowWad, onClose }: {
         }).filter(Boolean) as CheatSection[];
     }, [filter]);
     return (
-        <ModalShell title="Asset Path Cheat Sheet" icon={<BookOpen size={17} />} onClose={onClose}>
+        <ModalShell title={t('wadExplorerPage.modals.cheatSheet.title')} icon={<BookOpen size={17} />} onClose={onClose}>
             <div className="wad-cheat-head">
-                <p className="wad-modal__intro">Original cheat sheet by Aropatnik, adapted for Quartz. Show WAD opens the archive and expands the listed path when it is available.</p>
-                <label><Search size={13} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter sections, paths or WADs..." spellCheck={false} /></label>
+                <p className="wad-modal__intro">{t('wadExplorerPage.modals.cheatSheet.intro')}</p>
+                <label><Search size={13} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('wadExplorerPage.modals.cheatSheet.filterPlaceholder')} spellCheck={false} /></label>
             </div>
             <div className="wad-cheat">
-                {filtered.length === 0 && <div className="wad-cheat__empty">No sections match "{filter}".</div>}
+                {filtered.length === 0 && <div className="wad-cheat__empty">{t('wadExplorerPage.modals.cheatSheet.noMatch').replace('{filter}', filter)}</div>}
                 {filtered.map((section) => <CheatSectionView key={section.id} section={section} onSearch={onSearch} onShowWad={onShowWad} onClose={onClose} />)}
             </div>
         </ModalShell>
@@ -219,6 +222,7 @@ function CheatSectionView({ section, onSearch, onShowWad, onClose }: {
     onShowWad: (wad: string, path?: string) => void;
     onClose: () => void;
 }) {
+    const { t } = useTranslation();
     return (
         <section className="wad-cheat__section">
             <h3>{section.title}</h3>
@@ -231,12 +235,12 @@ function CheatSectionView({ section, onSearch, onShowWad, onClose }: {
                         {entry.path && <code className="is-path">{entry.path}</code>}
                         {entry.wad && !/[<>]/.test(entry.wad) && (
                             <button className="dl-btn dl-btn--sm dl-btn--secondary" onClick={() => { onShowWad(entry.wad!, entry.path); onClose(); }}>
-                                Show WAD
+                                {t('wadExplorerPage.modals.cheatSheet.showWad')}
                             </button>
                         )}
                         {entry.path && (
                             <button className="dl-btn dl-btn--sm dl-btn--ghost" onClick={() => { onSearch(entry.path!.replace(/<[^>]+>|\*/g, '').replace(/\/+/g, '/')); onClose(); }}>
-                                Search Path
+                                {t('wadExplorerPage.modals.cheatSheet.searchPath')}
                             </button>
                         )}
                         {entry.note && <em>{entry.note}</em>}
@@ -249,12 +253,13 @@ function CheatSectionView({ section, onSearch, onShowWad, onClose }: {
 }
 
 export function WadNotice({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
+    const { t } = useTranslation();
     return (
         <ModalShell
             title={title}
             icon={<BookOpen size={17} />}
             onClose={onClose}
-            footer={<button className="dl-btn dl-btn--primary" onClick={onClose}>OK</button>}
+            footer={<button className="dl-btn dl-btn--primary" onClick={onClose}>{t('wadExplorerPage.modals.notice.ok')}</button>}
         >
             <p className="wad-notice">{message}</p>
         </ModalShell>

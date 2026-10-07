@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { prettyName, sameKey } from '../model/categories';
+import { useTranslation } from '@/i18n';
 
 /* Field-category tab strip: 'All' + ranked present categories, ~10 visible with
    a "+N more" expander and a small search filter. Ported from
@@ -19,6 +20,7 @@ function pillClass(on: boolean): string {
 }
 
 export default function CategoryTabs({ categories, active, onSelect, pinned = [] }: CategoryTabsProps) {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
     const [query, setQuery] = useState('');
 
@@ -31,7 +33,7 @@ export default function CategoryTabs({ categories, active, onSelect, pinned = []
         : ordered;
     const overflow = q ? 0 : matched.length - VISIBLE; // searching shows all matches
     const shown = q || expanded ? matched : matched.slice(0, VISIBLE);
-    const tabs = [{ key: 'all', label: 'All' }, ...shown.map((c) => ({ key: c, label: prettyName(c) }))];
+    const tabs = [{ key: 'all', label: t('binEditor.allCategories') }, ...shown.map((c) => ({ key: c, label: prettyName(c) }))];
 
     return (
         <div
@@ -47,7 +49,7 @@ export default function CategoryTabs({ categories, active, onSelect, pinned = []
                 className="dl-input"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="filter…"
+                placeholder={t('binEditor.filterCategories')}
                 style={{ width: 90, height: 22, padding: '0 7px', marginRight: 4, fontSize: 11 }}
             />
             {tabs.map(({ key, label }) => (
@@ -68,7 +70,7 @@ export default function CategoryTabs({ categories, active, onSelect, pinned = []
                     onClick={() => setExpanded((e) => !e)}
                     style={{ height: 24, padding: '0 8px', fontSize: 11, color: 'var(--accent-primary)' }}
                 >
-                    {expanded ? '− less' : `+ ${overflow} more`}
+                    {expanded ? t('binEditor.less') : t('binEditor.moreCount', { count: overflow })}
                 </button>
             )}
         </div>

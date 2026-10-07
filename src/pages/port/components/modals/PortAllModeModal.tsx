@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '@/i18n';
 
 interface PortAllModeModalProps {
     open: boolean;
@@ -8,6 +9,7 @@ interface PortAllModeModalProps {
 }
 
 export default function PortAllModeModal({ open, onClose, onSelectMode, donorCount = 0 }: PortAllModeModalProps) {
+    const { t } = useTranslation();
     if (!open) return null;
 
     const btnBase: React.CSSProperties = {
@@ -58,7 +60,7 @@ export default function PortAllModeModal({ open, onClose, onSelectMode, donorCou
                 />
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.95rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Port All VFX Systems
+                        {t('port.portAllModal.title')}
                     </h2>
                     <button
                         onClick={onClose}
@@ -82,18 +84,17 @@ export default function PortAllModeModal({ open, onClose, onSelectMode, donorCou
                 </div>
                 <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', lineHeight: 1.6 }}>
-                        Donor systems detected: <span style={{ color: 'var(--accent-secondary)', fontWeight: 700 }}>{donorCount}</span>
+                        {t('port.portAllModal.description', { count: donorCount })}
                     </div>
                     <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ color: 'var(--accent-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Choose Mode</div>
                         <button onClick={() => onSelectMode('normal')} style={{ ...btnBase, background: 'color-mix(in oklab, var(--accent-secondary) 10%, transparent)', color: 'var(--accent-secondary)' }}>
-                            Port All Normally
+                            {t('port.portAllModal.addNewOnly')}
                         </button>
                         <button onClick={() => onSelectMode('replace-target')} style={{ ...btnBase, background: 'color-mix(in oklab, var(--color-danger) 14%, transparent)', border: '1px solid color-mix(in oklab, var(--color-danger) 32%, transparent)', color: 'var(--color-danger)' }}>
-                            Replace Target Then Port All
+                            {t('port.portAllModal.replaceExisting')}
                         </button>
                         <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', lineHeight: 1.5 }}>
-                            Replace mode removes existing target VFX systems and matching ResourceResolver particle entries first.
+                            {t('port.portAllModal.replaceDesc')}
                         </div>
                     </div>
                 </div>

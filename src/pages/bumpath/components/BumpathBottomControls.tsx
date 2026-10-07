@@ -8,6 +8,7 @@ import {
 } from '@mui/icons-material';
 import { FolderOpen as FolderOpenIcon } from 'lucide-react';
 import type { ScannedData } from '../utils/types';
+import { useTranslation } from '@/i18n';
 
 interface BumpathBottomControlsProps {
     handleSelectSourceDir: () => void;
@@ -42,6 +43,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
     statusMessage,
     statusKind,
 }: BumpathBottomControlsProps) {
+    const { t } = useTranslation();
     return (
         <div className="bumpath-bottom-bar">
             <div className="bumpath-bottom-bar__group bumpath-bottom-bar__cells">
@@ -49,7 +51,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     type="button"
                     className="dl-btn dl-btn--secondary dl-btn--sm dl-btn--icon"
                     onClick={handleSelectSourceDir}
-                    title="Select source folder"
+                    title={t('bumpath.selectSourceDir')}
                 >
                     <span className="dl-icon"><FolderOpenIcon size={16} /></span>
                 </button>
@@ -58,7 +60,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     className="dl-input"
                     value={prefixText}
                     onChange={(event) => handlePrefixTextChange(event.target.value)}
-                    placeholder="Custom prefix"
+                    placeholder={t('bumpath.customPrefix')}
                     data-bumpath-prefix
                     style={{ textAlign: 'center', fontWeight: 600 }}
                 />
@@ -70,7 +72,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     disabled={selectedEntriesSize === 0 || !prefixText.trim()}
                 >
                     <span className="dl-icon"><EditIcon /></span>
-                    <span>Apply Prefix</span>
+                    <span>{t('bumpath.applyPrefix')}</span>
                 </button>
 
                 <button
@@ -80,7 +82,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     disabled={quickRepathDisabled}
                 >
                     <span className="dl-icon"><AutoFixHighIcon /></span>
-                    <span>Quick Repath</span>
+                    <span>{t('bumpath.quickRepath')}</span>
                 </button>
             </div>
 
@@ -101,7 +103,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     data-bumpath-output
                 >
                     <span className="dl-icon"><FolderIcon /></span>
-                    <span>Select Output</span>
+                    <span>{t('bumpath.selectOutput')}</span>
                 </button>
 
                 <button
@@ -114,7 +116,7 @@ const BumpathBottomControls = React.memo(function BumpathBottomControls({
                     <span className="dl-icon">
                         {isProcessing ? <CircularProgress size={14} /> : <PlayArrowIcon />}
                     </span>
-                    <span>{isProcessing ? 'Processing...' : 'Bum'}</span>
+                    <span>{isProcessing ? t('bumpath.processingBtn') : t('bumpath.bum')}</span>
                 </button>
             </div>
         </div>
